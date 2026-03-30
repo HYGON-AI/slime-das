@@ -1,6 +1,6 @@
-#slime在dcu上训练示例
+# slime在dcu上训练示例
 本文档主要介绍在dcu上环境搭建至模型训练的整体流程。
-##基础环境搭建
+## 基础环境搭建
 由于slime对环境版本要求较严格，因此建议使用我们已经配置验证好的docker镜像，避免潜在环境影响；同时也可以根据我们的验证过的依赖清单，自行进行conda环境配置。
 
 ```shell
@@ -13,7 +13,7 @@ cd dcu_slime
 pip install -r requirements
 ```
 
-##数据准备
+## 数据准备
 目前 slime 只支持加载 .jsonl 格式文件，即文件的每一行都是一个 json，一行数据的样例（展开后）为：
 ```json
 {
@@ -34,7 +34,7 @@ hf download --repo-type dataset zhuzilin/dapo-math-17k --local-dir /root/dapo-ma
 # 下载评估数据集 (aime-2024)
 hf download --repo-type dataset zhuzilin/aime-2024 --local-dir /root/aime-2024
 ```
-##模型转换
+## 模型转换
 由于megatron无法直接加载huggingface ckpt，当用户采用huggingface模型资源时需要先将模型权重转换为megatron torch_dist格式，此处以qwen3-4B为例。
 ```shell script
 # 下载模型权重
@@ -49,7 +49,7 @@ PYTHONPATH=/root/Megatron-LM python tools/convert_hf_to_torch_dist.py \
     --use-cpu-initialization
 ```
 其中PYTHONPATH为pip list中megatron-core的路径, --use-cpu-initializationz主要是在利用AMD架构gpu时采用。
-##模型训练
+## 模型训练
 此处以qwen3-4B为例。
 ```shell script
 cd dcu_slime/examples
@@ -89,5 +89,5 @@ bash run_conda.sh
 # 启动docker环境执行脚本
 bash run_docker.sh 
 ```
-#重要说明
+# 重要说明
 - 本文以GPRO算法训练qwen3-4B为例，进行环境配置以及训练，更多算法以及训练参数搭配需参考[quick_start.md](https://github.com/THUDM/slime/docs/zh/get_started/quick_start.md)和[usage.md](https://github.com/THUDM/slime/docs/zh/get_started/usage.md)。
