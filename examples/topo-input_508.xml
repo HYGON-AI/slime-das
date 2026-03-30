@@ -1,0 +1,142 @@
+<system version="2">
+  <cpu numaid="0">
+    <pci busid="0000:01:00.0">
+      <pci busid="0000:07:00.0">
+        <pci busid="0000:09:00.0">
+          <gpu>
+            <xgmi target="0000:55:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:36:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:77:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:85:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:d5:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:b5:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:f5:00.0" count="7" tclass="0x0b4000"/>
+          </gpu>
+        </pci>
+      </pci>
+      <pci busid="0000:51:00.0">
+        <pci busid="0000:54:00.0">
+          <pci busid="0000:55:00.0">
+            <gpu>
+              <xgmi target="0000:09:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:36:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:77:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:85:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:d5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:b5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:f5:00.0" count="7" tclass="0x0b4000"/>
+            </gpu>
+          </pci>
+        </pci>
+      </pci>
+      <pci busid="0000:03:00.0">
+        <nic/>
+      </pci>
+    </pci>
+  </cpu>
+  <cpu numaid="1">
+    <pci busid="0000:71:00.0">
+      <pci busid="0000:31:00.0">
+        <pci busid="0000:34:00.0">
+          <pci busid="0000:36:00.0">
+            <gpu>
+              <xgmi target="0000:09:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:55:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:77:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:85:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:d5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:b5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:f5:00.0" count="7" tclass="0x0b4000"/>
+            </gpu>
+          </pci>
+        </pci>
+      </pci>
+      <pci busid="0000:75:00.0">
+        <pci busid="0000:77:00.0">
+          <gpu>
+              <xgmi target="0000:09:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:55:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:36:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:85:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:d5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:b5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:f5:00.0" count="7" tclass="0x0b4000"/>
+          </gpu>
+        </pci>
+      </pci>
+      <pci busid="0000:73:00.0">
+        <nic/>
+      </pci>
+    </pci>
+  </cpu>
+  <cpu numaid="4">
+    <pci busid="0000:81:00.0">
+      <pci busid="0000:83:00.0">
+        <pci busid="0000:85:00.0">
+          <gpu>
+            <xgmi target="0000:09:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:55:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:36:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:77:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:d5:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:b5:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:f5:00.0" count="7" tclass="0x0b4000"/>
+          </gpu>
+        </pci>
+      </pci>
+      <pci busid="0000:d1:00.0">
+        <pci busid="0000:d3:00.0">
+          <pci busid="0000:d5:00.0">
+            <gpu>
+              <xgmi target="0000:09:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:55:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:36:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:77:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:85:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:b5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:f5:00.0" count="7" tclass="0x0b4000"/>
+            </gpu>
+          </pci>
+        </pci>
+      </pci>
+      <pci busid="0000:86:00.0">
+        <nic/>
+      </pci>
+    </pci>
+  </cpu>
+  <cpu numaid="5">
+    <pci busid="0000:f1:00.0">
+      <pci busid="0000:b1:00.0">
+        <pci busid="0000:b3:00.0">
+          <pci busid="0000:b5:00.0">
+            <gpu>
+              <xgmi target="0000:09:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:55:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:36:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:77:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:85:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:d5:00.0" count="7" tclass="0x0b4000"/>
+              <xgmi target="0000:f5:00.0" count="7" tclass="0x0b4000"/>
+            </gpu>
+          </pci>
+        </pci>
+      </pci>
+      <pci busid="0000:f3:00.0">
+        <pci busid="0000:f5:00.0">
+          <gpu>
+            <xgmi target="0000:09:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:55:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:36:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:77:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:85:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:d5:00.0" count="7" tclass="0x0b4000"/>
+            <xgmi target="0000:b5:00.0" count="7" tclass="0x0b4000"/>
+          </gpu>
+        </pci>
+      </pci>
+      <pci busid="0000:f6:00.0">
+        <nic/>
+      </pci>
+    </pci>
+  </cpu>
+</system>
