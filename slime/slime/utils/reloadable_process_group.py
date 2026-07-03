@@ -5,11 +5,26 @@ from contextlib import contextmanager
 import torch
 import torch.distributed as dist
 
-from slime.utils.memory_utils import print_memory
+from slime.utils.memory_utils import available_memory, clear_memory, print_memory
 
 logger = logging.getLogger(__name__)
 
 old_new_group_dict = {}
+
+_COMM_MEMORY_CHECK_SKIP_OPS = {
+    "all_gather_into_tensor",
+    "allgather_into_tensor_coalesced",
+    "barrier",
+    "broadcast_object_list",
+    "reduce_scatter_tensor",
+    "all_to_all_single",
+    "isend",
+    "irecv",
+}
+
+
+def _should_check_memory_for_comm(op_name):
+    return op_name not in _COMM_MEMORY_CHECK_SKIP_OPS
 
 
 def monkey_patch_torch_dist():
@@ -47,45 +62,59 @@ def monkey_patch_torch_dist():
 
     dist.new_group = new_group
 
-    def get_new_function(func):
+    def get_new_query_function(func):
+        """Wrap query functions (get_rank, get_world_size, etc.) without memory check."""
+
         def new_function(*args, **kwargs):
             args = tuple([arg.group if isinstance(arg, ReloadableProcessGroup) else arg for arg in args])
             kwargs = {k: (v.group if isinstance(v, ReloadableProcessGroup) else v) for k, v in kwargs.items()}
-            with _wrap_low_level_call():
+            return func(*args, **kwargs)
+
+        return new_function
+
+    def get_new_comm_function(func, op_name=None):
+        """Wrap communication functions with memory check."""
+
+        def new_function(*args, **kwargs):
+            args = tuple([arg.group if isinstance(arg, ReloadableProcessGroup) else arg for arg in args])
+            kwargs = {k: (v.group if isinstance(v, ReloadableProcessGroup) else v) for k, v in kwargs.items()}
+            check_memory = True if op_name is None else _should_check_memory_for_comm(op_name)
+            with _wrap_low_level_call(check_memory=check_memory):
                 return func(*args, **kwargs)
 
         return new_function
 
-    dist.get_rank = get_new_function(dist.get_rank)
-    dist.get_world_size = get_new_function(dist.get_world_size)
-    dist.get_backend = get_new_function(dist.get_backend)
-    dist.get_global_rank = get_new_function(dist.get_global_rank)
-    dist.get_group_rank = get_new_function(dist.get_group_rank)
-    dist.get_process_group_ranks = get_new_function(dist.get_process_group_ranks)
+    dist.get_rank = get_new_query_function(dist.get_rank)
+    dist.get_world_size = get_new_query_function(dist.get_world_size)
+    dist.get_backend = get_new_query_function(dist.get_backend)
+    dist.get_global_rank = get_new_query_function(dist.get_global_rank)
+    dist.get_group_rank = get_new_query_function(dist.get_group_rank)
+    dist.get_process_group_ranks = get_new_query_function(dist.get_process_group_ranks)
 
-    dist.all_reduce = get_new_function(dist.all_reduce)
-    dist.all_gather = get_new_function(dist.all_gather)
-    dist.all_gather_into_tensor = get_new_function(dist.all_gather_into_tensor)
-    dist.all_gather_object = get_new_function(dist.all_gather_object)
-    dist.all_to_all = get_new_function(dist.all_to_all)
-    dist.all_to_all_single = get_new_function(dist.all_to_all_single)
-    dist.broadcast = get_new_function(dist.broadcast)
-    dist.reduce = get_new_function(dist.reduce)
-    dist.reduce_scatter = get_new_function(dist.reduce_scatter)
-    dist.reduce_scatter_tensor = get_new_function(dist.reduce_scatter_tensor)
-    dist.scatter = get_new_function(dist.scatter)
-    dist.gather = get_new_function(dist.gather)
-    dist.barrier = get_new_function(dist.barrier)
-    dist.send = get_new_function(dist.send)
-    dist.recv = get_new_function(dist.recv)
-    dist._coalescing_manager = get_new_function(dist._coalescing_manager)
+    dist.all_reduce = get_new_comm_function(dist.all_reduce)
+    dist.all_gather = get_new_comm_function(dist.all_gather)
+    dist.all_gather_into_tensor = get_new_comm_function(dist.all_gather_into_tensor, "all_gather_into_tensor")
+    dist.all_gather_object = get_new_comm_function(dist.all_gather_object)
+    dist.all_to_all = get_new_comm_function(dist.all_to_all)
+    dist.all_to_all_single = get_new_comm_function(dist.all_to_all_single, "all_to_all_single")
+    dist.broadcast = get_new_comm_function(dist.broadcast)
+    dist.broadcast_object_list = get_new_comm_function(dist.broadcast_object_list, "broadcast_object_list")
+    dist.reduce = get_new_comm_function(dist.reduce)
+    dist.reduce_scatter = get_new_comm_function(dist.reduce_scatter)
+    dist.reduce_scatter_tensor = get_new_comm_function(dist.reduce_scatter_tensor, "reduce_scatter_tensor")
+    dist.scatter = get_new_comm_function(dist.scatter)
+    dist.gather = get_new_comm_function(dist.gather)
+    dist.barrier = get_new_comm_function(dist.barrier, "barrier")
+    dist.send = get_new_comm_function(dist.send)
+    dist.recv = get_new_comm_function(dist.recv)
+    dist._coalescing_manager = get_new_comm_function(dist._coalescing_manager)
 
     # p2p
     old_isend = dist.isend
     old_irecv = dist.irecv
 
-    dist.isend = get_new_function(dist.isend)
-    dist.irecv = get_new_function(dist.irecv)
+    dist.isend = get_new_comm_function(dist.isend, "isend")
+    dist.irecv = get_new_comm_function(dist.irecv, "irecv")
 
     def get_new_p2pop_function(func):
         def new_function(*args, **kwargs):
@@ -178,8 +207,15 @@ class ReloadableProcessGroup(torch.distributed.ProcessGroup):
         inner = self.group
         if inner is None:
             raise RuntimeError("ReloadableProcessGroup: inner PG is None, call reload() first.")
-        with _wrap_low_level_call():
+        with _wrap_low_level_call(check_memory=_should_check_memory_for_comm(method)):
             return getattr(inner, method)(*args, **kwargs)
+
+    def _fwd_query(self, method, *args, **kwargs):
+        """Forward non-communication calls without memory check."""
+        inner = self.group
+        if inner is None:
+            raise RuntimeError("ReloadableProcessGroup: inner PG is None, call reload() first.")
+        return getattr(inner, method)(*args, **kwargs)
 
     def barrier(self, *a, **kw):
         return self._fwd("barrier", *a, **kw)
@@ -239,19 +275,19 @@ class ReloadableProcessGroup(torch.distributed.ProcessGroup):
         return self._fwd("recv_anysource", *a, **kw)
 
     def _start_coalescing(self, *a, **kw):
-        return self._fwd("_start_coalescing", *a, **kw)
+        return self._fwd_query("_start_coalescing", *a, **kw)
 
     def _end_coalescing(self, *a, **kw):
         return self._fwd("_end_coalescing", *a, **kw)
 
     def _get_backend_name(self):
-        return self._fwd("_get_backend_name")
+        return self._fwd_query("_get_backend_name")
 
     def _get_backend(self, *a, **kw):
-        return self._fwd("_get_backend", *a, **kw)
+        return self._fwd_query("_get_backend", *a, **kw)
 
     def _set_default_backend(self, *a, **kw):
-        return self._fwd("_set_default_backend", *a, **kw)
+        return self._fwd_query("_set_default_backend", *a, **kw)
 
     @property
     def bound_device_id(self):
@@ -273,8 +309,12 @@ def reload_process_groups():
 
 
 @contextmanager
-def _wrap_low_level_call():
+def _wrap_low_level_call(check_memory=True):
     try:
+        if check_memory:
+            mem_info = available_memory()
+            if mem_info["free_GB"] < 3:
+                clear_memory()
         yield
     except Exception as e:
         mem_info = print_memory("after torch distributed error")

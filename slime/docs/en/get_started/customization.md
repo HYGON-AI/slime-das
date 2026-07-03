@@ -28,7 +28,23 @@ Below is a summary of all available customization interfaces and their purposes.
 | [`--custom-megatron-init-path`](#17-megatron-hooks) | Custom initialization after Megatron setup. |
 | [`--custom-megatron-before-log-prob-hook-path`](#17-megatron-hooks) | Custom logic before log probability computation. |
 | [`--custom-megatron-before-train-step-hook-path`](#17-megatron-hooks) | Custom logic before each training step. |
-| [`--slime-router-middleware-paths`](#18-slime-router-middleware---slime-router-middleware-paths) | Add custom middleware to slime router. |
+
+## Agentic workflows through customization interfaces
+
+Agentic workflows — multi-turn tool use, sandbox interaction, environment feedback, verifier/test-based rewards — are an important class of data generation workflows. They plug into slime through the existing customization interfaces; slime does not require a separate agent framework.
+
+For most agentic use cases, **start with `--custom-generate-function-path` plus `--custom-rm-path`**, and only override the full rollout function when the default rollout loop is insufficient.
+
+| If you need to … | Use |
+| :--- | :--- |
+| Run a custom agent loop, tool calls, RAG, sandbox execution, browser/terminal interaction, or multi-turn generation for each sample, while reusing slime's default rollout loop | [`--custom-generate-function-path`](#2-custom-generate-function---custom-generate-function-path) |
+| Compute verifier rewards, test-based rewards, environment success checks, rule-based rewards, or call an external reward service | [`--custom-rm-path`](#3-reward-model---custom-rm-path) |
+| Replace the entire rollout orchestration (only when per-sample customization is not enough) | [`--rollout-function-path`](#1-rollout-function---rollout-function-path) |
+| Control task sampling, buffering, requeueing, or custom prompt/task sources | [`--data-source-path`](#15-data-source---data-source-path) |
+| Attach custom loss masks, metadata, or convert agentic outputs into training data | [`--rollout-data-postprocess-path`](#8-rollout-data-postprocess---rollout-data-postprocess-path), [`--custom-convert-samples-to-train-data-path`](#13-samples-to-train-data-conversion---custom-convert-samples-to-train-data-path) |
+| Debug long-running custom generation, verifier calls, tool calls, or sandbox steps | trace utilities in [`slime.utils.trace_utils`](../developer_guide/trace.md) |
+
+A native example of this pattern is [`examples/search-r1`](../../../examples/search-r1/), which adds search-augmented multi-turn generation via `--custom-generate-function-path` while keeping slime's default `sglang_rollout` outer loop. See also [`examples/multi_agent`](../../../examples/multi_agent/README.md) for a `--rollout-function-path`-based multi-agent pattern and [`examples/fully_async`](../../../examples/fully_async/README.md) for long-tail agentic generation.
 
 ## Detailed Interface Reference
 
@@ -40,7 +56,7 @@ Below is a summary of all available customization interfaces and their purposes.
 
 **Signature**:
 ```python
-async def generate_rollout(args, rollout_id, *, evaluation=False) -> RolloutFnTrainOutput | RolloutFnEvalOutput
+def generate_rollout(args, rollout_id, data_source, evaluation=False) -> RolloutFnTrainOutput | RolloutFnEvalOutput
 ```
 
 **Use Cases**:
@@ -60,13 +76,45 @@ async def generate_rollout(args, rollout_id, *, evaluation=False) -> RolloutFnTr
 
 **Signature**:
 ```python
-async def custom_generate(args, sample: Sample, sampling_params: dict) -> Sample
+async def custom_generate(args, sample: Sample, sampling_params: dict) -> Sample | list[Sample]
 ```
 
 **Use Cases**:
 - Implementing tool-calling or function-calling capabilities
 - Adding retrieval-augmented generation (RAG)
 - Multi-turn conversation handling
+
+#### Returning multiple training samples for one prompt
+
+In agentic settings such as subagents, multi-agent execution, or context compaction, one prompt rollout can naturally split into multiple trainable segments. For example, a subagent trajectory and the main-agent continuation may both need to be trained, or the context before and after compaction may be represented as separate segments.
+
+You do not need to replace the whole rollout function for this. A `custom_generate` function may return `list[Sample]`. The key contract is that sibling samples produced by the same rollout must share the same `group_id`, so slime keeps them together for train-step splitting and loss aggregation instead of counting them as independent groups. `Sample.rollout_id` remains as a deprecated write-only alias for older code that only assigns it.
+
+```python
+import copy
+
+from slime.utils.types import Sample
+
+
+async def custom_generate(args, sample: Sample, sampling_params: dict) -> list[Sample]:
+    segments = await run_agent_and_split_segments(args, sample, sampling_params)
+    group_id = sample.group_id if sample.group_id is not None else sample.index
+
+    samples: list[Sample] = []
+    for segment in segments:
+        s = copy.copy(sample)
+        s.tokens = segment.tokens
+        s.response = segment.response
+        s.response_length = segment.response_length
+        s.loss_mask = segment.loss_mask
+        s.reward = segment.reward
+        s.status = Sample.Status.COMPLETED
+        s.group_id = group_id
+        samples.append(s)
+    return samples
+```
+
+If one full trajectory has a single total reward but is split into `K` training segments, a common pattern is to distribute that reward across the segments, for example by assigning `reward / K` to each segment, so the same rollout reward is not amplified.
 
 **Example**: See [examples/search-r1/generate_with_search.py](../../../examples/search-r1/generate_with_search.py)
 
@@ -140,7 +188,7 @@ class DynamicFilterOutput:
 
 **Signature**:
 ```python
-def buffer_filter(samples: list[list[Sample]]) -> list[list[Sample]]
+def buffer_filter(args, rollout_id, buffer: list[list[Sample]], num_samples: int) -> list[list[Sample]]
 ```
 
 **Use Cases**:
@@ -177,7 +225,7 @@ def filter_function(args, samples: list[Sample]) -> None
 
 **Signature**:
 ```python
-def process_function(args, samples: list[list[Sample]]) -> None
+def process_function(args, samples: list[list[Sample]], data_source) -> None
 ```
 
 **Use Cases**:
@@ -350,6 +398,9 @@ class CustomDataSource(DataSource):
         
     def load(self, rollout_id=None):
         """Load state from checkpoint"""
+
+    def __len__(self):
+        """Length of the data source. May change when samples are added/fetched."""
 ```
 
 ---
@@ -397,23 +448,49 @@ def custom_hook(args, rollout_id, step_id, model, optimizer, opt_param_scheduler
 
 ---
 
-### 18. slime Router Middleware (`--slime-router-middleware-paths`)
-
-**Purpose**: Add custom middleware to the slime router for request processing.
-
-**Use Cases**:
-- Request/response transformation
-- Custom routing logic
-- Caching and optimization
-
----
-
-### 19. MoE Routing Replay
+### 18. MoE Routing Replay
 
 Stabilize MoE RL training by recording and replaying expert routing decisions to ensure consistency.
 
 | Argument | Description |
 | --- | --- |
 | `--use-routing-replay` | Forward-backward routing consistency in training. ([arXiv:2507.18071](https://arxiv.org/abs/2507.18071)) |
-| `--use-rollout-routing-replay` | R3: Replay routing from rollout during training. **Requires `--use-slime-router`**. ([arXiv:2510.11370](https://arxiv.org/abs/2510.11370)) |
+| `--use-rollout-routing-replay` | R3: Replay routing from rollout during training. Supported by slime's default `sglang_router` path. ([arXiv:2510.11370](https://arxiv.org/abs/2510.11370)) |
 
+## Testing Custom Function Paths
+
+slime also provides CPU-only contract tests for customization interfaces. These tests resolve components through import-path strings, so they can validate both built-in hooks and user-defined implementations passed through the same CLI arguments used by training.
+
+The tests live under `tests/plugin_contracts/` and are grouped by hook shape:
+
+- `tests/plugin_contracts/test_plugin_rollout_contracts.py`
+  Covers `--rollout-function-path`
+- `tests/plugin_contracts/test_plugin_generate_contracts.py`
+  Covers `--custom-generate-function-path`
+- `tests/plugin_contracts/test_plugin_path_loading_contracts.py`
+  Covers `--eval-function-path`, `--custom-rm-path`, `--dynamic-sampling-filter-path`, `--buffer-filter-path`, `--data-source-path`, `--rollout-sample-filter-path`, and `--rollout-all-samples-process-path`
+- `tests/plugin_contracts/test_plugin_runtime_hook_contracts.py`
+  Covers `--custom-rollout-log-function-path`, `--custom-eval-rollout-log-function-path`, `--custom-reward-post-process-path`, `--custom-convert-samples-to-train-data-path`, and `--rollout-data-postprocess-path`
+
+Run all customization contract tests locally:
+
+```bash
+python -m pytest \
+  tests/plugin_contracts/test_plugin_rollout_contracts.py \
+  tests/plugin_contracts/test_plugin_generate_contracts.py \
+  tests/plugin_contracts/test_plugin_path_loading_contracts.py \
+  tests/plugin_contracts/test_plugin_runtime_hook_contracts.py
+```
+
+Each test file can also be executed directly with `python tests/plugin_contracts/<file>.py`, which keeps them compatible with `run-ci-changed`.
+
+A dedicated `run-ci-cpu-unittest` CI label is also available. Adding it to a PR triggers the CPU-only unit-test job, which runs the contract tests plus other lightweight unit tests in parallel (no GPU required).
+
+For user-defined implementations, you can either export environment variables such as `SLIME_CONTRACT_ROLLOUT_FUNCTION_PATH` and `SLIME_CONTRACT_CUSTOM_RM_PATH`, or pass overrides directly when running a test file, for example:
+
+```bash
+python tests/plugin_contracts/test_plugin_rollout_contracts.py \
+  --rollout-function-path my_project.custom_rollout.generate_rollout
+```
+
+To validate your own custom implementation, replace the plugin paths used in these tests with your module path and keep the same assertions on signatures, return structure, and side effects.

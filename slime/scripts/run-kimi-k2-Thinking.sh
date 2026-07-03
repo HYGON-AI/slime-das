@@ -13,7 +13,7 @@ pkill -9 python
 set -ex
 
 # will prevent ray from buffering stdout/stderr
-export PYTHONBUFFERED=16
+export PYTHONUNBUFFERED=1
 
 NVLINK_COUNT=$(nvidia-smi topo -m 2>/dev/null | grep -o 'NV[0-9][0-9]*' | wc -l)
 if [ "$NVLINK_COUNT" -gt 0 ]; then
@@ -170,7 +170,7 @@ ray job submit --address="http://127.0.0.1:8265" \
    --actor-num-nodes 32 \
    --actor-num-gpus-per-node 8 \
    --colocate \
-   --update-weight-buffer-size $(( 4 * 512 * 1024 * 1024))
+   --update-weight-buffer-size $(( 4 * 512 * 1024 * 1024)) \
    ${MODEL_ARGS[@]} \
    ${CKPT_ARGS[@]} \
    ${ROLLOUT_ARGS[@]} \

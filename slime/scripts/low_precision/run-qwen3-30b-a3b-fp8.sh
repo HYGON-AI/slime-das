@@ -14,7 +14,7 @@
 set -ex
 
 # will prevent ray from buffering stdout/stderr
-export PYTHONBUFFERED=16
+export PYTHONUNBUFFERED=1
 
 NVLINK_COUNT=$(nvidia-smi topo -m 2>/dev/null | grep -o 'NV[0-9][0-9]*' | wc -l)
 if [ "$NVLINK_COUNT" -gt 0 ]; then
@@ -127,7 +127,6 @@ SGLANG_ARGS=(
    --sglang-mem-fraction-static 0.6
    --sglang-cuda-graph-bs 1 2 4 8 $(seq 16 8 256)
    --sglang-expert-parallel-size 8
-   --use-slime-router
    # --use-rollout-routing-replay
 )
 

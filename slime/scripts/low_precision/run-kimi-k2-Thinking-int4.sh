@@ -13,7 +13,7 @@ pkill -9 python
 set -ex
 
 # will prevent ray from buffering stdout/stderr
-export PYTHONBUFFERED=16
+export PYTHONUNBUFFERED=1
 
 NVLINK_COUNT=$(nvidia-smi | grep -o "NVLink" | wc -l)
 if [ "$NVLINK_COUNT" -gt 0 ]; then
@@ -135,7 +135,6 @@ SGLANG_ARGS=(
 
    # make every dp rank has 128 concurrency
    --sglang-server-concurrency 1024
-   --use-slime-router
 )
 
 

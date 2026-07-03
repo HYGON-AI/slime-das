@@ -28,7 +28,23 @@ slime 通过函数路径参数提供了广泛的自定义能力。这些参数�
 | [`--custom-megatron-init-path`](#17-megatron-hook) | Megatron 设置后的自定义初始化。 |
 | [`--custom-megatron-before-log-prob-hook-path`](#17-megatron-hook) | log probability 计算前的自定义逻辑。 |
 | [`--custom-megatron-before-train-step-hook-path`](#17-megatron-hook) | 每个训练步骤前的自定义逻辑。 |
-| [`--slime-router-middleware-paths`](#18-slime-router-中间件---slime-router-middleware-paths) | 向 slime router 添加自定义中间件。 |
+
+## 通过 customization 接口实现 agentic workflow
+
+agentic workflow——multi-turn tool use、sandbox interaction、environment feedback、verifier/test-based reward——是一类重要的训练数据生成 workflow。它们通过 slime 已有的 customization 接口接入，slime 本身并不需要变成一个单独的 agent framework。
+
+绝大多数 agentic 场景下，**建议从 `--custom-generate-function-path` 加 `--custom-rm-path` 开始**，只有在默认 rollout 循环无法满足需求时再去覆盖整个 rollout function。
+
+| 想做的事 | 应使用的接口 |
+| :--- | :--- |
+| 让每条 sample 跑自定义的 agent loop、tool call、RAG、sandbox 执行、browser/terminal 交互或多轮生成，同时复用 slime 默认 rollout loop | [`--custom-generate-function-path`](#2-自定义生成函数---custom-generate-function-path) |
+| 实现 verifier reward、test-based reward、environment 成功判定、rule-based reward 或调用外部 reward 服务 | [`--custom-rm-path`](#3-奖励模型---custom-rm-path) |
+| 替换整个 rollout 编排（只在 per-sample 自定义不够用时使用） | [`--rollout-function-path`](#1-rollout-函数---rollout-function-path) |
+| 控制任务采样、缓冲、回填，或自定义 prompt / task 数据源 | [`--data-source-path`](#15-数据源---data-source-path) |
+| 给 agentic 输出附加自定义 loss mask、metadata，或转换成训练数据 | [`--rollout-data-postprocess-path`](#8-rollout-数据后处理---rollout-data-postprocess-path)、[`--custom-convert-samples-to-train-data-path`](#13-样本转训练数据---custom-convert-samples-to-train-data-path) |
+| 调试长耗时的 custom generation、verifier、tool call 或 sandbox 调用 | [`slime.utils.trace_utils`](../developer_guide/trace.md) 中的 trace 工具 |
+
+这一模式的原生示例是 [`examples/search-r1`](../../../examples/search-r1/)：通过 `--custom-generate-function-path` 接入搜索增强的多轮生成，外层仍然走 slime 默认的 `sglang_rollout`。互补的示例可参考 [`examples/multi_agent`](../../../examples/multi_agent/README.md) 中基于 `--rollout-function-path` 的多 agent 模式，以及 [`examples/fully_async`](../../../examples/fully_async/README.md) 中适合 long-tail agentic 场景的 fully-async rollout。
 
 ## 详细接口参考
 
@@ -40,7 +56,7 @@ slime 通过函数路径参数提供了广泛的自定义能力。这些参数�
 
 **函数签名**:
 ```python
-async def generate_rollout(args, rollout_id, *, evaluation=False) -> RolloutFnTrainOutput | RolloutFnEvalOutput
+def generate_rollout(args, rollout_id, data_source, evaluation=False) -> RolloutFnTrainOutput | RolloutFnEvalOutput
 ```
 
 **使用场景**:
@@ -60,13 +76,45 @@ async def generate_rollout(args, rollout_id, *, evaluation=False) -> RolloutFnTr
 
 **函数签名**:
 ```python
-async def custom_generate(args, sample: Sample, sampling_params: dict) -> Sample
+async def custom_generate(args, sample: Sample, sampling_params: dict) -> Sample | list[Sample]
 ```
 
 **使用场景**:
 - 实现工具调用（tool-calling）或函数调用（function-calling）能力
 - 添加检索增强生成（RAG）
 - 多轮对话处理
+
+#### 一个 prompt 产生多个训练样本
+
+在 subagent、multi-agent、context compact 等 agentic 场景中，一次 prompt rollout 可能会自然拆成多个可训练片段。例如：主 agent 调用 subagent 后，subagent 的轨迹和主 agent 的后续轨迹都需要参与训练；或者发生 compact 后，compact 前后的上下文被切成多个 segment。
+
+这种情况下不需要重写整个 rollout 函数，`custom_generate` 可以直接返回 `list[Sample]`。关键是：这些由同一次 rollout 拆出来的 sibling samples 必须设置相同的 `group_id`，这样 slime 会在训练切分和 loss 聚合时把它们视作同一个训练分组，而不是重复计数为多个独立分组。`Sample.rollout_id` 仍然作为 deprecated write-only alias 保留给只赋值它的旧代码。
+
+```python
+import copy
+
+from slime.utils.types import Sample
+
+
+async def custom_generate(args, sample: Sample, sampling_params: dict) -> list[Sample]:
+    segments = await run_agent_and_split_segments(args, sample, sampling_params)
+    group_id = sample.group_id if sample.group_id is not None else sample.index
+
+    samples: list[Sample] = []
+    for segment in segments:
+        s = copy.copy(sample)
+        s.tokens = segment.tokens
+        s.response = segment.response
+        s.response_length = segment.response_length
+        s.loss_mask = segment.loss_mask
+        s.reward = segment.reward
+        s.status = Sample.Status.COMPLETED
+        s.group_id = group_id
+        samples.append(s)
+    return samples
+```
+
+如果一个完整 trajectory 只有一个总奖励、但被拆成了 `K` 个训练片段，常见做法是在这些片段之间分配这个奖励（例如每个片段写入 `reward / K`），避免把同一次 rollout 的奖励重复放大。
 
 **示例**: 参见 [examples/search-r1/generate_with_search.py](../../../examples/search-r1/generate_with_search.py)
 
@@ -140,7 +188,7 @@ class DynamicFilterOutput:
 
 **函数签名**:
 ```python
-def buffer_filter(samples: list[list[Sample]]) -> list[list[Sample]]
+def buffer_filter(args, rollout_id, buffer: list[list[Sample]], num_samples: int) -> list[list[Sample]]
 ```
 
 **使用场景**:
@@ -177,7 +225,7 @@ def filter_function(args, samples: list[Sample]) -> None
 
 **函数签名**:
 ```python
-def process_function(args, samples: list[list[Sample]]) -> None
+def process_function(args, samples: list[list[Sample]], data_source) -> None
 ```
 
 **使用场景**:
@@ -350,6 +398,11 @@ class CustomDataSource(DataSource):
         
     def load(self, rollout_id=None):
         """从 ckpt 加载状态"""
+    
+    def __len__(self) -> int:
+    """
+        返回当前数据源中可用样本的数量。该数量可能会随着样本的获取或添加而变化。
+    """
 ```
 
 ---
@@ -397,23 +450,49 @@ def custom_hook(args, rollout_id, step_id, model, optimizer, opt_param_scheduler
 
 ---
 
-### 18. slime Router 中间件 (`--slime-router-middleware-paths`)
-
-**用途**: 向 slime router 添加自定义中间件用于请求处理。
-
-**使用场景**:
-- 请求/响应转换
-- 自定义路由逻辑
-- 缓存和优化
-
----
-
-### 19. MoE 路由重放
+### 18. MoE 路由重放
 
 通过记录和重放专家路由决策来稳定 MoE RL 训练。
 
 | 参数 | 说明 |
 | --- | --- |
 | `--use-routing-replay` | 训练中前向-反向路由一致性。([arXiv:2507.18071](https://arxiv.org/abs/2507.18071)) |
-| `--use-rollout-routing-replay` | R3：在训练时重放 rollout 阶段的路由。**需要 `--use-slime-router`**。([arXiv:2510.11370](https://arxiv.org/abs/2510.11370)) |
+| `--use-rollout-routing-replay` | R3：在训练时重放 rollout 阶段的路由。slime 默认的 `sglang_router` 路径支持该功能。([arXiv:2510.11370](https://arxiv.org/abs/2510.11370)) |
 
+## 自定义函数路径的测试
+
+slime 现在也提供了一组 CPU 契约测试，用于校验这些 customization 接口。测试会通过字符串形式的导入路径来动态加载组件，因此既能回归仓库内置 hook，也能验证用户通过和训练时完全相同的 CLI 参数传入的自定义实现。
+
+这些测试统一放在 `tests/plugin_contracts/` 目录下，并按 hook 形态归并成少数几个文件：
+
+- `tests/plugin_contracts/test_plugin_rollout_contracts.py`
+  覆盖 `--rollout-function-path`
+- `tests/plugin_contracts/test_plugin_generate_contracts.py`
+  覆盖 `--custom-generate-function-path`
+- `tests/plugin_contracts/test_plugin_path_loading_contracts.py`
+  覆盖 `--eval-function-path`、`--custom-rm-path`、`--dynamic-sampling-filter-path`、`--buffer-filter-path`、`--data-source-path`、`--rollout-sample-filter-path`、`--rollout-all-samples-process-path`
+- `tests/plugin_contracts/test_plugin_runtime_hook_contracts.py`
+  覆盖 `--custom-rollout-log-function-path`、`--custom-eval-rollout-log-function-path`、`--custom-reward-post-process-path`、`--custom-convert-samples-to-train-data-path`、`--rollout-data-postprocess-path`
+
+本地运行全部 customization 契约测试：
+
+```bash
+python -m pytest \
+  tests/plugin_contracts/test_plugin_rollout_contracts.py \
+  tests/plugin_contracts/test_plugin_generate_contracts.py \
+  tests/plugin_contracts/test_plugin_path_loading_contracts.py \
+  tests/plugin_contracts/test_plugin_runtime_hook_contracts.py
+```
+
+每个测试文件也支持直接通过 `python tests/plugin_contracts/<file>.py` 执行，这样可以和 `run-ci-changed` 保持兼容。
+
+CI 中也提供了独立的 `run-ci-cpu-unittest` label，给 PR 打上该标签后会并行运行 CPU-only 的单元测试任务，包含上述契约测试以及其他轻量单测（无需 GPU）。
+
+如果你要验证自己的自定义实现，可以直接设置环境变量，例如 `SLIME_CONTRACT_ROLLOUT_FUNCTION_PATH`、`SLIME_CONTRACT_CUSTOM_RM_PATH`，也可以在直接运行测试文件时传参，例如：
+
+```bash
+python tests/plugin_contracts/test_plugin_rollout_contracts.py \
+  --rollout-function-path my_project.custom_rollout.generate_rollout
+```
+
+验证时只需将插件路径替换成你的模块路径，断言逻辑（函数签名、返回结构、副作用）保持不变即可。

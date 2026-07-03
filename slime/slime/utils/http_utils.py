@@ -162,16 +162,18 @@ def _next_actor():
     return actor
 
 
-async def _post(client, url, payload, max_retries=60):
+async def _post(client, url, payload, max_retries=60, headers=None):
     retry_count = 0
     while retry_count < max_retries:
+        response = None
         try:
-            response = await client.post(url, json=payload or {})
+            response = await client.post(url, json=payload or {}, headers=headers)
             response.raise_for_status()
+            content = await response.aread()
             try:
-                output = response.json()
+                output = json.loads(content)
             except json.JSONDecodeError:
-                output = response.text
+                output = content.decode() if isinstance(content, bytes) else content
         except Exception as e:
             retry_count += 1
 
@@ -188,6 +190,9 @@ async def _post(client, url, payload, max_retries=60):
                 raise e
             await asyncio.sleep(1)
             continue
+        finally:
+            if response is not None:
+                await response.aclose()
         break
 
     return output
@@ -204,6 +209,7 @@ def init_http_client(args):
         _http_client = httpx.AsyncClient(
             limits=httpx.Limits(max_connections=_client_concurrency),
             timeout=httpx.Timeout(None),
+            trust_env=False,  # internal SGLang comm only — never route through system proxy
         )
 
     # Optionally initialize distributed POST via Ray without changing interfaces
@@ -215,8 +221,8 @@ def init_http_client(args):
 def _init_ray_distributed_post(args):
     """Initialize one or more Ray async actors per node for HTTP POST.
 
-    Uses NodeAffinitySchedulingStrategy to place actors on distinct nodes.
-    Controlled by SLIME_HTTP_POST_ACTORS_PER_NODE.
+    Uses NodeAffinitySchedulingStrategy to place actors on alive Ray nodes.
+    Creates ``args.num_gpus_per_node`` actors per node.
     """
     global _post_actors
     if _post_actors:
@@ -238,15 +244,16 @@ def _init_ray_distributed_post(args):
             self._client = httpx.AsyncClient(
                 limits=httpx.Limits(max_connections=max(1, concurrency)),
                 timeout=httpx.Timeout(None),
+                trust_env=False,  # internal SGLang comm only — never route through system proxy
             )
 
-        async def do_post(self, url, payload, max_retries=60):
-            return await _post(self._client, url, payload, max_retries)
+        async def do_post(self, url, payload, max_retries=60, headers=None):
+            return await _post(self._client, url, payload, max_retries, headers=headers)
 
     # Create actors per node
     created = []
-    # Distribute client concurrency across actors (at least 1 per actor)
-    per_actor_conc = (_client_concurrency + len(nodes)) // len(nodes)
+    total_actors = max(1, len(nodes) * args.num_gpus_per_node)
+    per_actor_conc = max(1, (_client_concurrency + total_actors - 1) // total_actors)
 
     for node in nodes:
         node_id = node["NodeID"]
@@ -265,26 +272,30 @@ def _init_ray_distributed_post(args):
     _post_actors = created
 
 
-async def post(url, payload, max_retries=60):
+async def post(url, payload, max_retries=60, headers=None):
     # If distributed mode is enabled and actors exist, dispatch via Ray.
     if _distributed_post_enabled and _post_actors:
         try:
-            import ray
-
             actor = _next_actor()
             if actor is not None:
-                # Use a thread to avoid blocking the event loop on ray.get
-                obj_ref = actor.do_post.remote(url, payload, max_retries)
-                return await asyncio.to_thread(ray.get, obj_ref)
+                # Await the Ray ObjectRef directly. The previous
+                # `asyncio.to_thread(ray.get, obj_ref)` blocked an OS thread
+                # from the default ThreadPoolExecutor (capped at
+                # `min(32, cpu+4)`), which becomes a hard upper bound on the
+                # number of in-flight POSTs that can be waited on in parallel
+                # and produces large tail latencies under high concurrency.
+                obj_ref = actor.do_post.remote(url, payload, max_retries, headers=headers)
+                return await obj_ref
         except Exception as e:
             logger.info(f"[http_utils] Distributed POST failed, falling back to local: {e} (url={url})")
             # fall through to local
 
-    return await _post(_http_client, url, payload, max_retries)
+    return await _post(_http_client, url, payload, max_retries, headers=headers)
 
 
 async def get(url):
     response = await _http_client.get(url)
     response.raise_for_status()
-    output = response.json()
+    content = await response.aread()
+    output = json.loads(content)
     return output

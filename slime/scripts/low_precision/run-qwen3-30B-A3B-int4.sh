@@ -12,8 +12,8 @@ pkill -9 python
 
 set -ex
 
-# will prevent ray from buffering stdout/stderrs
-export PYTHONBUFFERED=16
+# will prevent ray from buffering stdout/stderr
+export PYTHONUNBUFFERED=1
 
 NVLINK_COUNT=$(nvidia-smi topo -m 2>/dev/null | grep -o 'NV[0-9][0-9]*' | wc -l)
 if [ "$NVLINK_COUNT" -gt 0 ]; then
@@ -114,7 +114,6 @@ SGLANG_ARGS=(
    --rollout-num-gpus-per-engine 1
    --sglang-mem-fraction-static 0.7
    --sglang-cuda-graph-bs 1 2 4 8 $(seq 16 8 256)
-   --use-slime-router
 )
 
 MISC_ARGS=(

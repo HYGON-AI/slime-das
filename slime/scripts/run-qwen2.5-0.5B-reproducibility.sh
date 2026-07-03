@@ -13,7 +13,7 @@ pkill -9 python
 set -ex
 
 # will prevent ray from buffering stdout/stderr
-export PYTHONBUFFERED=16
+export PYTHONUNBUFFERED=1
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 source "${SCRIPT_DIR}/scripts/models/qwen2.5-0.5B.sh"
@@ -126,7 +126,6 @@ ray job submit --address="http://127.0.0.1:8265" \
    --actor-num-gpus-per-node 8 \
    --colocate \
    --calculate-per-token-loss \
-   --use-slime-router \
    ${MODEL_ARGS[@]} \
    ${CKPT_ARGS[@]} \
    ${ROLLOUT_ARGS[@]} \

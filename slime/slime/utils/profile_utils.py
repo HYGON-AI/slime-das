@@ -69,7 +69,7 @@ def _create_torch_profiler(args, name):
         on_trace_ready=torch.profiler.tensorboard_trace_handler(
             args.tensorboard_dir,
             worker_name=f"{name}_rank_{torch.distributed.get_rank()}",
-            use_gzip=False,
+            use_gzip=True,
         ),
         record_shapes=True,
         with_stack=True,

@@ -14,7 +14,7 @@ This example connects `slime` with [`strands-sglang`](https://github.com/horizon
 
 - Captures exact token IDs during generation (no retokenization drift)
 - Automatically tracks `loss_mask` via `token_manager`
-- Provides `ToolIterationLimiter` for clean trajectory truncation
+- Provides `ToolLimiter` for clean trajectory truncation
 
 ## Install Dependencies
 
@@ -32,7 +32,7 @@ This example connects `slime` with [`strands-sglang`](https://github.com/horizon
 
 ```bash
 # hf checkpoint
-huggingface-cli download Qwen/Qwen3-8B --local-dir /root/models/Qwen/Qwen3-8B
+hf download Qwen/Qwen3-8B --local-dir /root/models/Qwen/Qwen3-8B
 
 # mcore checkpoint
 cd /root/slime

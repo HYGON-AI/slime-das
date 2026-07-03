@@ -62,11 +62,20 @@ class RayTrainGroup:
         if self.args.offload_train and self.args.train_backend == "megatron":
             import torch_memory_saver
 
-            dynlib_path = os.path.join(
-                os.path.dirname(os.path.dirname(torch_memory_saver.__file__)),
+            for path in [
+                "torch_memory_saver_hook_mode_preload_cu12.abi3.so",
                 "torch_memory_saver_hook_mode_preload.abi3.so",
-            )
-            assert os.path.exists(dynlib_path), f"LD_PRELOAD so file {dynlib_path} does not exist."
+            ]:
+                dynlib_path = os.path.join(
+                    os.path.dirname(os.path.dirname(torch_memory_saver.__file__)),
+                    path,
+                )
+                if os.path.exists(dynlib_path):
+                    break
+            else:
+                raise FileNotFoundError(
+                    "Cannot find torch_memory_saver dynamic library. Please make sure torch_memory_saver is properly installed."
+                )
 
             env_vars["LD_PRELOAD"] = dynlib_path
             env_vars["TMS_INIT_ENABLE"] = "1"
@@ -76,16 +85,9 @@ class RayTrainGroup:
         if self.args.use_routing_replay and self.role == "actor":
             env_vars["ENABLE_ROUTING_REPLAY"] = "1"
 
-        backend = self.args.train_backend
-        if backend == "megatron":
-            from slime.backends.megatron_utils.actor import MegatronTrainRayActor
+        from slime.backends.megatron_utils.actor import MegatronTrainRayActor
 
-            actor_impl = MegatronTrainRayActor
-
-        else:
-            from slime.backends.fsdp_utils import FSDPTrainRayActor
-
-            actor_impl = FSDPTrainRayActor
+        actor_impl = MegatronTrainRayActor
 
         TrainRayActor = ray.remote(num_gpus=1, runtime_env={"env_vars": env_vars})(actor_impl)
 
@@ -105,16 +107,35 @@ class RayTrainGroup:
                 master_addr, master_port = ray.get(actor.get_master_addr_and_port.remote())
             self._actor_handlers.append(actor)
 
-    def async_init(self, args, role, with_ref=False):
+    def async_init(self, args, role, with_ref=False, with_opd_teacher=False):
         """
         Allocate GPU resourced and initialize model, optimzier, local ckpt, etc.
         """
         self.args = args
-        return [actor.init.remote(args, role, with_ref=with_ref) for actor in self._actor_handlers]
+        return [
+            actor.init.remote(args, role, with_ref=with_ref, with_opd_teacher=with_opd_teacher)
+            for actor in self._actor_handlers
+        ]
 
-    def async_train(self, rollout_id, rollout_data_ref):
-        """Do one rollout training"""
-        return [actor.train.remote(rollout_id, rollout_data_ref) for actor in self._actor_handlers]
+    def async_train(self, rollout_id, rollout_data_ref, external_data=None):
+        """Do one rollout training. Returns a list of Ray refs (one per worker).
+
+        For critics, each ref resolves to ``{"values": [cpu tensors...]}`` (or ``{}``
+        for non-last-PP-stage workers). Actor refs resolve to ``None``.
+
+        ``external_data`` may be a list (one item per worker) or a single dict
+        broadcast to all workers.
+        """
+        if isinstance(external_data, list):
+            assert len(external_data) == len(self._actor_handlers)
+            return [
+                actor.train.remote(rollout_id, rollout_data_ref, external_data=ed)
+                for actor, ed in zip(self._actor_handlers, external_data, strict=False)
+            ]
+        return [
+            actor.train.remote(rollout_id, rollout_data_ref, external_data=external_data)
+            for actor in self._actor_handlers
+        ]
 
     def save_model(self, rollout_id, force_sync=False):
         """Save actor model"""
@@ -132,14 +153,6 @@ class RayTrainGroup:
 
     def clear_memory(self):
         return ray.get([actor.clear_memory.remote() for actor in self._actor_handlers])
-
-    def connect(self, critic_group):
-        return ray.get(
-            [
-                actor.connect_actor_critic.remote(critic)
-                for actor, critic in zip(self._actor_handlers, critic_group._actor_handlers, strict=False)
-            ]
-        )
 
     def set_rollout_manager(self, rollout_manager):
         return ray.get([actor.set_rollout_manager.remote(rollout_manager) for actor in self._actor_handlers])
