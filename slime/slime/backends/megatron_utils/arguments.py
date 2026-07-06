@@ -3,7 +3,8 @@ import logging
 
 from megatron.training.arguments import parse_args as _megatron_parse_args
 from megatron.training.arguments import validate_args as _megatron_validate_args
-from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
+#from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
+from megatron.core.tokenizers.utils.build_tokenizer import vocab_size_with_padding as _vocab_size_with_padding #nhb
 from transformers import AutoConfig
 
 __all__ = ["validate_args", "megatron_parse_args", "set_default_megatron_args"]
