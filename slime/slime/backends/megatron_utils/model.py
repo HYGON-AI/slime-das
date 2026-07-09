@@ -228,7 +228,12 @@ def setup_model_and_optimizer(
     optimizer = get_megatron_optimizer(
         config=config,
         model_chunks=model,
-        use_gloo_process_groups=args.enable_gloo_process_groups,
+        #use_gloo_process_groups=args.enable_gloo_process_groups,
+        use_gloo_process_groups=getattr( #nhb
+            args,
+            "enable_gloo_process_groups",
+            getattr(args, "use_gloo_process_groups", False),
+        ),
     )
     opt_param_scheduler = get_optimizer_param_scheduler(args, optimizer)
     return model, optimizer, opt_param_scheduler
