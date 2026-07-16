@@ -251,3 +251,136 @@ Qwen3-4B-direct-node2-rollout8-20260709-143000.log
 ```bash
 bash stop_ray.sh
 ```
+
+## Qwen3.5-4B 运行流程
+
+Qwen3.5-4B 的 HuggingFace 目录是 Qwen3.5/VL 风格配置，直接使用 Megatron-Bridge 的 `--megatron-to-hf-mode bridge` 路线容易走到 `Qwen35VLBridge`，在文本 RL 的权重同步阶段会出现参数名不匹配问题。因此 Qwen3.5-4B 推荐使用官方文本 RL 路线：
+
+1. 先把 HuggingFace 权重转换成 `torch_dist`。
+2. 训练时从 `torch_dist` 加载权重。
+3. 不要在训练脚本里传 `--megatron-to-hf-mode bridge`。
+
+### 1. 转换 Qwen3.5-4B 为 torch_dist
+
+在容器内执行：
+
+```bash
+cd /home/dcu_slime/slime
+
+source /home/dcu_slime/dcu_example/common_env.sh
+source scripts/models/qwen3.5-4B.sh
+
+python tools/convert_hf_to_torch_dist.py \
+  "${MODEL_ARGS[@]}" \
+  --hf-checkpoint /model/qwen3.5/Qwen3.5-4B \
+  --save /home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
+  --use-cpu-initialization \
+  --no-gradient-accumulation-fusion
+```
+
+如果提示缺少 `mbridge`，先安装：
+
+```bash
+/usr/bin/python3 -m pip install mbridge
+```
+
+转换成功后，应存在：
+
+```text
+/home/Download/qwen3.5/Qwen3.5-4B_torch_dist/latest_checkpointed_iteration.txt
+```
+
+### 2. 启动 Ray
+
+单节点 8 卡示例，假设当前机器 IP 是 `12.12.12.52`：
+
+```bash
+cd /home/dcu_slime/dcu_example
+
+ray stop --force || true
+rm -rf /dev/shm/ray_tmp_dcu
+
+source common_env.sh
+
+export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
+export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+
+NUM_GPUS=8 bash start_ray.sh 12.12.12.52
+```
+
+检查 Ray：
+
+```bash
+ray status --address=12.12.12.52:63792
+curl http://127.0.0.1:8265/api/version
+```
+
+### 3. 运行 Qwen3.5-4B 训练
+
+使用专门的脚本：
+
+```bash
+cd /home/dcu_slime/dcu_example
+
+MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
+TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
+SAVE_ROOT=/home/Download/qwen3.5/Qwen3.5-4B_slime \
+MODEL_ARGS_SCRIPT=/home/dcu_slime/slime/scripts/models/qwen3.5-4B.sh \
+SUBMIT_MODE=direct \
+RAY_HEAD_ADDRESS=12.12.12.52:63792 \
+ACTOR_NUM_NODES=1 \
+ACTOR_NUM_GPUS_PER_NODE=4 \
+TENSOR_MODEL_PARALLEL_SIZE=4 \
+ROLLOUT_NUM_GPUS=4 \
+ROLLOUT_NUM_GPUS_PER_ENGINE=4 \
+NUM_ROLLOUT=1000 \
+ROLLOUT_BATCH_SIZE=8 \
+N_SAMPLES_PER_PROMPT=8 \
+GLOBAL_BATCH_SIZE=16 \
+N_SAMPLES_PER_EVAL_PROMPT=8 \
+ROLLOUT_MAX_RESPONSE_LEN=1024 \
+EVAL_MAX_RESPONSE_LEN=1024 \
+SGLANG_MEM_FRACTION_STATIC=0.6 \
+bash run_qwen3.5_4b.sh --node-ip 127.0.0.1
+```
+
+说明：
+
+- `MODEL_PATH`：原始 HuggingFace 模型目录。
+- `TORCH_DIST_PATH`：第一步转换出来的 `torch_dist` 权重目录。
+- `SAVE_ROOT`：训练 checkpoint 保存目录。
+- `MODEL_ARGS_SCRIPT`：Qwen3.5-4B 的 Megatron 模型参数脚本。
+- `SUBMIT_MODE=direct`：直接连接已启动的 Ray 集群运行，避免 Ray Job runtime env 额外干扰。
+- `ACTOR_NUM_GPUS_PER_NODE=4`、`ROLLOUT_NUM_GPUS=4`：单节点 8 卡时，4 张卡用于 actor 训练，4 张卡用于 SGLang rollout。
+- `SGLANG_MEM_FRACTION_STATIC=0.6`：控制 SGLang 静态显存占用比例。Qwen3.5 默认 context 较大，显存压力高时可以适当调低。
+
+### 4. 断点续训
+
+如果 `/home/Download/qwen3.5/Qwen3.5-4B_slime/latest_checkpointed_iteration.txt` 已存在，可以加 `--resume`：
+
+```bash
+cd /home/dcu_slime/dcu_example
+
+MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
+TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
+SAVE_ROOT=/home/Download/qwen3.5/Qwen3.5-4B_slime \
+MODEL_ARGS_SCRIPT=/home/dcu_slime/slime/scripts/models/qwen3.5-4B.sh \
+SUBMIT_MODE=direct \
+RAY_HEAD_ADDRESS=12.12.12.52:63792 \
+ACTOR_NUM_NODES=1 \
+ACTOR_NUM_GPUS_PER_NODE=4 \
+TENSOR_MODEL_PARALLEL_SIZE=4 \
+ROLLOUT_NUM_GPUS=4 \
+ROLLOUT_NUM_GPUS_PER_ENGINE=4 \
+NUM_ROLLOUT=1000 \
+ROLLOUT_BATCH_SIZE=8 \
+N_SAMPLES_PER_PROMPT=8 \
+GLOBAL_BATCH_SIZE=16 \
+N_SAMPLES_PER_EVAL_PROMPT=8 \
+ROLLOUT_MAX_RESPONSE_LEN=1024 \
+EVAL_MAX_RESPONSE_LEN=1024 \
+SGLANG_MEM_FRACTION_STATIC=0.6 \
+bash run_qwen3.5_4b.sh --node-ip 127.0.0.1 --resume
+```

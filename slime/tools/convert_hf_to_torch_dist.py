@@ -27,6 +27,17 @@ def add_convertion_args(parser):
         default="raw",
         help="The method to convert megatron weights to hugging face weights for SGLang.",
     )
+        # Qwen3.5 / Qwen3-Next args. Some Megatron versions do not register them.
+    try:
+        parser.add_argument("--use-gated-attention", action="store_true")
+    except Exception:
+        pass
+
+    try:
+        parser.add_argument("--attention-output-gate", action="store_true")
+    except Exception:
+        pass
+    
     try:
         parser.add_argument("--padded-vocab-size", type=int, default=None)
     except Exception:
