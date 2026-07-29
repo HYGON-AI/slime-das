@@ -1,6 +1,6 @@
-# DCU slime Qwen3-4B example
+# HCU slime Qwen3-4B example
 
-本目录提供 DCU 环境下运行 slime Qwen3-4B 示例的脚本。所有命令都在 Docker 容器内执行。
+本目录提供 HCU 环境下运行 slime Qwen3-4B 示例的脚本。所有命令都在 Docker 容器内执行。
 
 已验证的基础镜像：
 
@@ -11,10 +11,10 @@
 ## 目录说明
 
 ```text
-dcu_example/
+hcu_example/
 ├── common_env.sh              # 通用环境变量
 ├── env.yaml                   # Ray Job runtime env，单节点 job 模式可用
-├── requirements-dcu.txt       # 当前镜像上的增量依赖
+├── requirements-hcu.txt       # 当前镜像上的增量依赖
 ├── start_ray.sh               # 启动 Ray head
 ├── start_ray_worker.sh        # worker 节点加入 Ray 集群
 ├── run_all.sh                 # 单节点一键运行
@@ -28,8 +28,8 @@ dcu_example/
 进入目录并安装依赖：
 
 ```bash
-cd /home/dcu_slime/dcu_example
-/usr/bin/python3 -m pip install -r requirements-dcu.txt
+cd /home/hcu_slime/hcu_example
+/usr/bin/python3 -m pip install -r requirements-hcu.txt
 chmod +x *.sh
 ```
 
@@ -45,10 +45,10 @@ chmod +x *.sh
 重要：多节点 Ray 的临时目录必须使用节点本地路径，不能放共享 `/home`。
 
 ```bash
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 ```
 
-如果放到共享 `/home/ray_tmp_dcu`，不同节点的 raylet socket 会混在一起，可能报：
+如果放到共享 `/home/ray_tmp_hcu`，不同节点的 raylet socket 会混在一起，可能报：
 
 ```text
 Could not connect to socket .../sockets/raylet.1
@@ -59,14 +59,14 @@ Could not connect to socket .../sockets/raylet.1
 假设单节点 IP 为 `12.12.12.48`，使用 8 张卡：
 
 ```bash
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 
 ray stop --force || true
-rm -rf /dev/shm/ray_tmp_dcu
+rm -rf /dev/shm/ray_tmp_hcu
 
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -118,12 +118,12 @@ rollout: 8 卡
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
-rm -rf /dev/shm/ray_tmp_dcu
+rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -138,12 +138,12 @@ NUM_GPUS=8 bash start_ray.sh 12.12.12.48
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
-rm -rf /dev/shm/ray_tmp_dcu
+rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -192,7 +192,7 @@ PY
 推荐多节点使用 `direct` 模式，不走 Ray dashboard job server：
 
 ```bash
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 
 SUBMIT_MODE=direct \
 RAY_HEAD_ADDRESS=12.12.12.48:63792 \
@@ -231,13 +231,13 @@ ACTOR_NUM_GPUS_PER_NODE=4
 ROLLOUT_NUM_GPUS=8
 ROLLOUT_NUM_GPUS_PER_ENGINE=4
 
-LOG_DIR=/home/dcu_slime/dcu_example/logs
+LOG_DIR=/home/hcu_slime/hcu_example/logs
 ```
 
 训练日志会自动保存到 `LOG_DIR`，默认是：
 
 ```text
-/home/dcu_slime/dcu_example/logs
+/home/hcu_slime/hcu_example/logs
 ```
 
 日志文件名包含模型名、提交模式、节点配置和时间，例如：
@@ -265,9 +265,9 @@ Qwen3.5-4B 的 HuggingFace 目录是 Qwen3.5/VL 风格配置，直接使用 Mega
 在容器内执行：
 
 ```bash
-cd /home/dcu_slime/slime
+cd /home/hcu_slime/slime
 
-source /home/dcu_slime/dcu_example/common_env.sh
+source /home/hcu_slime/hcu_example/common_env.sh
 source scripts/models/qwen3.5-4B.sh
 
 python tools/convert_hf_to_torch_dist.py \
@@ -295,14 +295,14 @@ python tools/convert_hf_to_torch_dist.py \
 单节点 8 卡示例，假设当前机器 IP 是 `12.12.12.52`：
 
 ```bash
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 
 ray stop --force || true
-rm -rf /dev/shm/ray_tmp_dcu
+rm -rf /dev/shm/ray_tmp_hcu
 
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -322,12 +322,12 @@ curl http://127.0.0.1:8265/api/version
 使用专门的脚本：
 
 ```bash
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 
 MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
 TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
 SAVE_ROOT=/home/Download/qwen3.5/Qwen3.5-4B_slime \
-MODEL_ARGS_SCRIPT=/home/dcu_slime/slime/scripts/models/qwen3.5-4B.sh \
+MODEL_ARGS_SCRIPT=/home/hcu_slime/slime/scripts/models/qwen3.5-4B.sh \
 SUBMIT_MODE=direct \
 RAY_HEAD_ADDRESS=12.12.12.52:63792 \
 ACTOR_NUM_NODES=1 \
@@ -361,12 +361,12 @@ bash run_qwen3.5_4b.sh --node-ip 127.0.0.1
 如果 `/home/Download/qwen3.5/Qwen3.5-4B_slime/latest_checkpointed_iteration.txt` 已存在，可以加 `--resume`：
 
 ```bash
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 
 MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
 TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
 SAVE_ROOT=/home/Download/qwen3.5/Qwen3.5-4B_slime \
-MODEL_ARGS_SCRIPT=/home/dcu_slime/slime/scripts/models/qwen3.5-4B.sh \
+MODEL_ARGS_SCRIPT=/home/hcu_slime/slime/scripts/models/qwen3.5-4B.sh \
 SUBMIT_MODE=direct \
 RAY_HEAD_ADDRESS=12.12.12.52:63792 \
 ACTOR_NUM_NODES=1 \

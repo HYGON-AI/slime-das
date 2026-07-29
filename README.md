@@ -1,12 +1,12 @@
-# DCU Slime
+# HCU Slime
 
-基于 [THUDM/slime](https://github.com/THUDM/slime) v0.3.0 的 DCU 适配版本，支持在 DCU 环境下使用 Megatron-LM、Megatron-Bridge 和 SGLang 进行 RL 训练。
+基于 [THUDM/slime](https://github.com/THUDM/slime) v0.3.0 的 HCU 适配版本，支持在 HCU 环境下使用 Megatron-LM、Megatron-Bridge 和 SGLang 进行 RL 训练。
 
-当前仓库提供了一个已经跑通的 Qwen3-4B 示例，示例脚本统一放在 `dcu_example/` 目录下。
+当前仓库提供了一个已经跑通的 Qwen3-4B 示例，示例脚本统一放在 `hcu_example/` 目录下。
 
 ## 特性
 
-- 支持 DCU Docker 环境运行
+- 支持 HCU Docker 环境运行
 - 支持 Qwen3-4B 示例训练
 - 支持 Megatron-Bridge 直接加载 HuggingFace 权重
 - 支持 Ray + SGLang rollout + Megatron actor training
@@ -15,8 +15,8 @@
 ## 目录结构
 
 ```text
-dcu_slime/
-├── dcu_example/          # DCU Qwen3-4B 训练示例脚本
+hcu_slime/
+├── hcu_example/          # HCU Qwen3-4B 训练示例脚本
 │   ├── common_env.sh     # 通用环境变量
 │   ├── env.yaml          # Ray runtime env
 │   ├── README.md         # 示例脚本说明
@@ -25,8 +25,8 @@ dcu_slime/
 │   ├── start_ray.sh      # 启动 Ray head
 │   └── stop_ray.sh       # 停止 Ray
 ├── slime/                # slime 源码
-├── requirements-dcu.txt  # 当前 DCU Docker 环境导出的依赖记录
-└── usage_dcu.md          # 旧版 DCU 使用说明
+├── requirements-hcu.txt  # 当前 HCU Docker 环境导出的依赖记录
+└── usage_hcu.md          # 旧版 HCU 使用说明
 ```
 
 ## Docker 基础环境
@@ -40,33 +40,33 @@ dcu_slime/
 
 ## Python 依赖
 
-通过仓库已经有 `requirements-dcu.txt`，可以直接安装：
+通过仓库已经有 `requirements-hcu.txt`，可以直接安装：
 
 ```bash
-/usr/bin/python3 -m pip install -r requirements-dcu.txt
+/usr/bin/python3 -m pip install -r requirements-hcu.txt
 ```
 
 ## 外部源码依赖路径
 
-DCU 环境使用以下适配源码（sglang_v0.5.12、dcu_megatron_v0.17.0）：
+HCU 环境使用以下适配源码（sglang_v0.5.12、hcu_megatron_v0.17.0）：
 
-- [SGLang DCU 源码](https://developer.sourcefind.cn/codes/OpenDAS/sglang)
-- [DCU Megatron-LM/Megatron-Bridge 源码](http://42.228.13.241:10068/dcutoolkit/deeplearing/dcu_megatron)
+- [SGLang HCU 源码](https://developer.sourcefind.cn/codes/OpenDAS/sglang)
+- [HCU Megatron-LM/Megatron-Bridge 源码](http://42.228.13.241:10068/hcutoolkit/deeplearing/hcu_megatron)
 
 这些路径已经写入：
 
 ```text
-dcu_example/common_env.sh
-dcu_example/env.yaml
+hcu_example/common_env.sh
+hcu_example/env.yaml
 ```
 
 如果你的路径不同，请优先修改这两个文件，或者在运行前通过环境变量覆盖：
 
 ```bash
-export SLIME_ROOT=/home/dcu_slime
-export MEGATRON_BRIDGE_ROOT=/home/dcu_megatron/Megatron-Bridge
-export MEGATRON_LM_ROOT=/home/dcu_megatron/Megatron-LM
-export SGLANG_ROOT=/home/sglang_v0.5.10
+export SLIME_ROOT=/home/hcu_slime
+export MEGATRON_BRIDGE_ROOT=/home/hcu_megatron/Megatron-Bridge
+export MEGATRON_LM_ROOT=/home/hcu_megatron/Megatron-LM
+export SGLANG_ROOT=/home/sglang_v0.5.12
 ```
 
 ## 数据和模型准备
@@ -98,14 +98,14 @@ Megatron 0.17 支持通过 Megatron-Bridge 直接加载 HuggingFace 权重，因
 假设单节点 IP 是 `12.12.12.48`，使用 8 张卡：
 
 ```bash
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 
 ray stop --force || true
-rm -rf /dev/shm/ray_tmp_dcu
+rm -rf /dev/shm/ray_tmp_hcu
 
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -143,12 +143,12 @@ rollout: 8 卡
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
-rm -rf /dev/shm/ray_tmp_dcu
+rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -163,12 +163,12 @@ NUM_GPUS=8 bash start_ray.sh 12.12.12.48
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
-rm -rf /dev/shm/ray_tmp_dcu
+rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_dcu
+export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -193,7 +193,7 @@ ray status --address=12.12.12.48:63792
 多节点推荐使用 `direct` 模式，不走 Ray dashboard job server：
 
 ```bash
-cd /home/dcu_slime/dcu_example
+cd /home/hcu_slime/hcu_example
 
 SUBMIT_MODE=direct \
 RAY_HEAD_ADDRESS=12.12.12.48:63792 \
@@ -232,10 +232,10 @@ ACTOR_NUM_GPUS_PER_NODE=4
 ROLLOUT_NUM_GPUS=8
 ROLLOUT_NUM_GPUS_PER_ENGINE=4
 
-LOG_DIR=/home/dcu_slime/dcu_example/logs
+LOG_DIR=/home/hcu_slime/hcu_example/logs
 ```
 
-训练日志会自动保存到 `LOG_DIR`，默认是 `dcu_example/logs`。日志文件名会带时间戳，例如：
+训练日志会自动保存到 `LOG_DIR`，默认是 `hcu_example/logs`。日志文件名会带时间戳，例如：
 
 ```text
 Qwen3-4B-direct-node2-rollout8-20260709-143000.log
@@ -243,7 +243,7 @@ Qwen3-4B-direct-node2-rollout8-20260709-143000.log
 
 ## 本示例做的主要改进
 
-相比手动执行一长串命令，`dcu_example/` 对运行流程做了如下整理：
+相比手动执行一长串命令，`hcu_example/` 对运行流程做了如下整理：
 
 - 将通用环境变量统一放到 `common_env.sh`
 - 将 Ray runtime env 统一放到 `env.yaml`
@@ -252,7 +252,7 @@ Qwen3-4B-direct-node2-rollout8-20260709-143000.log
 - 将 Ray、Triton、Torch 编译缓存放到 `/home`，避免 `/tmp` 或 Docker overlay 空间不足
 - 固定 Ray 端口，避免 dashboard 和 job submit 地址混乱
 - 通过 `PYTHONPATH` 导入 Megatron-LM、Megatron-Bridge、SGLang 和 slime
-- 默认开启 `USE_DCU_CUSTOM_ALLREDUCE=1`
+- 默认开启 `USE_HCU_CUSTOM_ALLREDUCE=1`
 - 默认使用 Megatron-Bridge 直接加载 HuggingFace 权重
 - 支持 `--resume` 从最近 checkpoint 继续训练
 
@@ -261,7 +261,7 @@ Qwen3-4B-direct-node2-rollout8-20260709-143000.log
 更多脚本细节见：
 
 ```text
-dcu_example/README.md
+hcu_example/README.md
 ```
 
 

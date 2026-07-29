@@ -1,81 +1,98 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# DCU single-node/multi-node friendly Qwen3.5-4B example.
-# This script is adapted from the upstream Qwen3.5 example, but uses the
-# dcu_example runtime environment and avoids running train.py by file path so
-# that slime.ray does not shadow the real Ray package.
+# HCU slime smoke test for DeepSeek-R1 sliced to 4 layers.
+#
+# This script intentionally does NOT pass --sglang-quantization by default.
+# Use it to test DeepSeek-R1 4-layer MoE with a normal SGLang rollout weight
+# layout, avoiding FP8/INT8 online update_weight layout mismatch first.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
-NODE_IP="${NODE_IP:-12.12.12.52}"
-MODEL_PATH="${MODEL_PATH:-/model/qwen3.5/Qwen3.5-4B}"
-MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/scripts/models/qwen3.5-4B.sh}"
+NODE_IP="${NODE_IP:-12.12.12.5}"
+MODEL_PATH="${MODEL_PATH:-/home/Download/deepseek/DeepSeek-R1-4layers}"
+TORCH_DIST_PATH="${TORCH_DIST_PATH:-/home/Download/deepseek/DeepSeek-R1-4layers_torch_dist}"
 DATA_ROOT="${DATA_ROOT:-/home/Download}"
-SAVE_ROOT="${SAVE_ROOT:-/home/Download/qwen3.5/Qwen3.5-4B_slime}"
+SAVE_ROOT="${SAVE_ROOT:-/home/Download/deepseek/DeepSeek-R1-4layers_slime}"
 LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}/logs}"
+
+MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/slime/scripts/models/deepseek-v3.sh}"
+NUM_LAYERS="${NUM_LAYERS:-4}"
+LOAD_MODE="${LOAD_MODE:-bridge}"
+
+SUBMIT_MODE="${SUBMIT_MODE:-direct}"
+RAY_HEAD_ADDRESS="${RAY_HEAD_ADDRESS:-${NODE_IP}:${RAY_PORT}}"
 
 ACTOR_NUM_NODES="${ACTOR_NUM_NODES:-1}"
 ACTOR_NUM_GPUS_PER_NODE="${ACTOR_NUM_GPUS_PER_NODE:-4}"
 ROLLOUT_NUM_GPUS="${ROLLOUT_NUM_GPUS:-4}"
 ROLLOUT_NUM_GPUS_PER_ENGINE="${ROLLOUT_NUM_GPUS_PER_ENGINE:-4}"
 SGLANG_PIPELINE_PARALLEL_SIZE="${SGLANG_PIPELINE_PARALLEL_SIZE:-1}"
-SUBMIT_MODE="${SUBMIT_MODE:-direct}"
-RAY_HEAD_ADDRESS="${RAY_HEAD_ADDRESS:-${NODE_IP}:${RAY_PORT}}"
-
-NUM_ROLLOUT="${NUM_ROLLOUT:-64}"
-ROLLOUT_BATCH_SIZE="${ROLLOUT_BATCH_SIZE:-2}"
-N_SAMPLES_PER_PROMPT="${N_SAMPLES_PER_PROMPT:-2}"
-GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-4}"
-N_SAMPLES_PER_EVAL_PROMPT="${N_SAMPLES_PER_EVAL_PROMPT:-8}"
-ROLLOUT_MAX_RESPONSE_LEN="${ROLLOUT_MAX_RESPONSE_LEN:-1024}"
-EVAL_MAX_RESPONSE_LEN="${EVAL_MAX_RESPONSE_LEN:-1024}"
-MAX_TOKENS_PER_GPU="${MAX_TOKENS_PER_GPU:-4096}"
-KL_LOSS_COEF="${KL_LOSS_COEF:-0.0}"
 
 TENSOR_MODEL_PARALLEL_SIZE="${TENSOR_MODEL_PARALLEL_SIZE:-4}"
 PIPELINE_MODEL_PARALLEL_SIZE="${PIPELINE_MODEL_PARALLEL_SIZE:-1}"
 CONTEXT_PARALLEL_SIZE="${CONTEXT_PARALLEL_SIZE:-1}"
-EXPERT_MODEL_PARALLEL_SIZE="${EXPERT_MODEL_PARALLEL_SIZE:-1}"
+EXPERT_MODEL_PARALLEL_SIZE="${EXPERT_MODEL_PARALLEL_SIZE:-4}"
 EXPERT_TENSOR_PARALLEL_SIZE="${EXPERT_TENSOR_PARALLEL_SIZE:-1}"
 
-SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.7}"
+NUM_ROLLOUT="${NUM_ROLLOUT:-4}"
+ROLLOUT_BATCH_SIZE="${ROLLOUT_BATCH_SIZE:-1}"
+N_SAMPLES_PER_PROMPT="${N_SAMPLES_PER_PROMPT:-1}"
+GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-1}"
+N_SAMPLES_PER_EVAL_PROMPT="${N_SAMPLES_PER_EVAL_PROMPT:-1}"
+ROLLOUT_MAX_RESPONSE_LEN="${ROLLOUT_MAX_RESPONSE_LEN:-64}"
+EVAL_MAX_RESPONSE_LEN="${EVAL_MAX_RESPONSE_LEN:-64}"
+MAX_TOKENS_PER_GPU="${MAX_TOKENS_PER_GPU:-512}"
+KL_LOSS_COEF="${KL_LOSS_COEF:-0.0}"
+
+# SGLang rollout defaults. Quantization is intentionally empty by default.
+SGLANG_CONTEXT_LENGTH="${SGLANG_CONTEXT_LENGTH:-1024}"
+SGLANG_KV_CACHE_DTYPE="${SGLANG_KV_CACHE_DTYPE:-}"
+SGLANG_MEM_FRACTION_STATIC="${SGLANG_MEM_FRACTION_STATIC:-0.45}"
+SGLANG_MAX_RUNNING_REQUESTS="${SGLANG_MAX_RUNNING_REQUESTS:-1}"
+SGLANG_ATTENTION_BACKEND="${SGLANG_ATTENTION_BACKEND:-hcu_mla}"
+SGLANG_QUANTIZATION="${SGLANG_QUANTIZATION:-}"
+SGLANG_DISABLE_RADIX_CACHE="${SGLANG_DISABLE_RADIX_CACHE:-1}"
+SGLANG_PAGE_SIZE="${SGLANG_PAGE_SIZE:-64}"
+SGLANG_CHUNKED_PREFILL_SIZE="${SGLANG_CHUNKED_PREFILL_SIZE:--1}"
 
 ENABLE_TORCH_PROFILE="${ENABLE_TORCH_PROFILE:-0}"
 PROFILE_TARGET="${PROFILE_TARGET:-train_overall}"
 PROFILE_RANKS="${PROFILE_RANKS:-0}"
 PROFILE_STEP_START="${PROFILE_STEP_START:-3}"
 PROFILE_STEP_END="${PROFILE_STEP_END:-4}"
-PROFILE_DIR="${PROFILE_DIR:-/home/profile/qwen3.5-4B_$(date '+%Y%m%d_%H%M%S')}"
+PROFILE_DIR="${PROFILE_DIR:-/home/profile/deepseek_r1_4layer_no_sglang_quant_$(date '+%Y%m%d_%H%M%S')}"
 
 RESUME=0
 CLEANUP=0
 
 usage() {
   cat <<'EOF'
-Usage: run_qwen3.5-4B.sh [options]
+Usage: run_deepseek_r1_4layer_no_sglang_quant.sh [options]
 
 Options:
-  --node-ip IP       Ray head IP
-  --model-path PATH  Hugging Face Qwen3.5-4B directory
-  --data-root PATH   Parent directory of dapo-math-17k and aime-2024
-  --save-root PATH   Checkpoint output directory
-  --resume           Resume from SAVE_ROOT/latest_checkpointed_iteration.txt
-  --cleanup          Kill sglang/ray/python after the job exits
-  -h, --help         Show this help
+  --node-ip IP             Ray head IP
+  --model-path PATH        Sliced HuggingFace checkpoint directory
+  --torch-dist-path PATH   Converted torch_dist checkpoint directory
+  --data-root PATH         Parent directory of dapo-math-17k and aime-2024
+  --save-root PATH         Output checkpoint directory
+  --resume                 Resume from SAVE_ROOT
+  --cleanup                Kill sglang/ray/python after the job exits
+  -h, --help               Show this help
 
-Common environment knobs:
+Common env knobs:
+  LOAD_MODE=bridge|torch_dist             default: bridge
+  NUM_LAYERS=4                            default: 4
+  MODEL_ARGS_SCRIPT=/path/deepseek-v3.sh  default: ${SLIME_ROOT}/slime/scripts/models/deepseek-v3.sh
+  SUBMIT_MODE=direct|job                  default: direct
   ACTOR_NUM_GPUS_PER_NODE=4
   TENSOR_MODEL_PARALLEL_SIZE=4
   ROLLOUT_NUM_GPUS=4
   ROLLOUT_NUM_GPUS_PER_ENGINE=4
-  NUM_ROLLOUT=64
-  ROLLOUT_BATCH_SIZE=2
-  N_SAMPLES_PER_PROMPT=2
-  GLOBAL_BATCH_SIZE=4
-  SGLANG_MEM_FRACTION_STATIC=0.7
+  SGLANG_QUANTIZATION=                   default: empty, no --sglang-quantization
+  SGLANG_KV_CACHE_DTYPE=                 default: empty, no --sglang-kv-cache-dtype
 EOF
 }
 
@@ -83,6 +100,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --node-ip) NODE_IP="$2"; shift 2 ;;
     --model-path) MODEL_PATH="$2"; shift 2 ;;
+    --torch-dist-path) TORCH_DIST_PATH="$2"; shift 2 ;;
     --data-root) DATA_ROOT="$2"; shift 2 ;;
     --save-root) SAVE_ROOT="$2"; shift 2 ;;
     --resume) RESUME=1; shift ;;
@@ -94,35 +112,61 @@ done
 
 for required in \
   "${MODEL_PATH}/config.json" \
-  "${MODEL_ARGS_SCRIPT}" \
   "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl" \
   "${DATA_ROOT}/aime-2024/aime-2024.jsonl" \
+  "${MODEL_ARGS_SCRIPT}" \
   "${SCRIPT_DIR}/env.yaml"; do
   [[ -e "${required}" ]] || { echo "Missing required file: ${required}" >&2; exit 1; }
 done
+
+if [[ "${LOAD_MODE}" == "torch_dist" ]]; then
+  [[ -f "${TORCH_DIST_PATH}/latest_checkpointed_iteration.txt" ]] || {
+    echo "Missing torch_dist checkpoint: ${TORCH_DIST_PATH}/latest_checkpointed_iteration.txt" >&2
+    exit 1
+  }
+elif [[ "${LOAD_MODE}" != "bridge" ]]; then
+  echo "Unknown LOAD_MODE: ${LOAD_MODE}. Use bridge or torch_dist." >&2
+  exit 2
+fi
 
 curl --fail --silent "http://127.0.0.1:${RAY_DASHBOARD_PORT}/api/version" >/dev/null || {
   echo "Ray dashboard is not available. Run ${SCRIPT_DIR}/start_ray.sh ${NODE_IP} first." >&2
   exit 1
 }
 
-# shellcheck disable=SC1090
-source "${MODEL_ARGS_SCRIPT}"
-
-CKPT_ARGS=(
-   --hf-checkpoint /model/qwen3.5/Qwen3.5-4B
-   --load /home/Download/qwen3.5/Qwen3.5-4B_torch_dist
-   --ref-load /home/Download/qwen3.5/Qwen3.5-4B_torch_dist
-   --save /home/Download/qwen3.5/Qwen3.5-4B_slime
-   --save-interval 20
-)
-
+LOAD_PATH=""
 if [[ "${RESUME}" == 1 ]]; then
   [[ -f "${SAVE_ROOT}/latest_checkpointed_iteration.txt" ]] || {
     echo "Cannot resume: ${SAVE_ROOT}/latest_checkpointed_iteration.txt does not exist." >&2
     exit 1
   }
-  CKPT_ARGS+=(--load "${SAVE_ROOT}")
+  LOAD_PATH="${SAVE_ROOT}"
+elif [[ "${LOAD_MODE}" == "torch_dist" ]]; then
+  LOAD_PATH="${TORCH_DIST_PATH}"
+fi
+
+# shellcheck disable=SC1090
+MODEL_ARGS_NUM_LAYERS="${NUM_LAYERS}" source "${MODEL_ARGS_SCRIPT}"
+
+CKPT_ARGS=(
+  --hf-checkpoint "${MODEL_PATH}"
+  --save "${SAVE_ROOT}"
+  --save-interval 20
+)
+
+if [[ -n "${LOAD_PATH}" ]]; then
+  CKPT_ARGS+=(--load "${LOAD_PATH}")
+fi
+
+if [[ "${LOAD_MODE}" == "bridge" ]]; then
+  CKPT_ARGS+=(
+    --megatron-to-hf-mode bridge
+    --ref-load "${MODEL_PATH}"
+  )
+else
+  CKPT_ARGS+=(
+    --ref-load "${TORCH_DIST_PATH}"
+  )
 fi
 
 ROLLOUT_ARGS=(
@@ -166,11 +210,12 @@ PERF_ARGS=(
 
 GRPO_ARGS=(
   --advantage-estimator grpo
+  --use-kl-loss
   --kl-loss-coef "${KL_LOSS_COEF}"
   --kl-loss-type low_var_kl
-  --kl-coef 0.00
   --entropy-coef 0.00
   --eps-clip 0.2
+  --eps-clip-high 0.28
 )
 
 OPTIMIZER_ARGS=(
@@ -179,7 +224,7 @@ OPTIMIZER_ARGS=(
   --lr-decay-style constant
   --weight-decay 0.1
   --adam-beta1 0.9
-  --adam-beta2 0.98
+  --adam-beta2 0.95
   --optimizer-cpu-offload
   --overlap-cpu-optimizer-d2h-h2d
   --use-precision-aware-optimizer
@@ -188,13 +233,26 @@ OPTIMIZER_ARGS=(
 SGLANG_ARGS=(
   --rollout-num-gpus-per-engine "${ROLLOUT_NUM_GPUS_PER_ENGINE}"
   --sglang-pipeline-parallel-size "${SGLANG_PIPELINE_PARALLEL_SIZE}"
+  --sglang-context-length "${SGLANG_CONTEXT_LENGTH}"
   --sglang-mem-fraction-static "${SGLANG_MEM_FRACTION_STATIC}"
-  --sglang-attention-backend fa3
-  --sglang-page-size 64
-  --sglang-disable-radix-cache
+  --sglang-max-running-requests "${SGLANG_MAX_RUNNING_REQUESTS}"
+  --sglang-attention-backend "${SGLANG_ATTENTION_BACKEND}"
+  --sglang-page-size "${SGLANG_PAGE_SIZE}"
+  --sglang-chunked-prefill-size "${SGLANG_CHUNKED_PREFILL_SIZE}"
   --sglang-disable-cuda-graph
-  --sglang-disable-custom-all-reduce
 )
+
+if [[ -n "${SGLANG_KV_CACHE_DTYPE}" ]]; then
+  SGLANG_ARGS+=(--sglang-kv-cache-dtype "${SGLANG_KV_CACHE_DTYPE}")
+fi
+
+if [[ -n "${SGLANG_QUANTIZATION}" ]]; then
+  SGLANG_ARGS+=(--sglang-quantization "${SGLANG_QUANTIZATION}")
+fi
+
+if [[ "${SGLANG_DISABLE_RADIX_CACHE}" == "1" ]]; then
+  SGLANG_ARGS+=(--sglang-disable-radix-cache)
+fi
 
 MISC_ARGS=(
   --attention-dropout 0.0
@@ -221,19 +279,20 @@ fi
 mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
 MODEL_NAME="$(basename "${MODEL_PATH}")"
 TIME_STAMP="$(date '+%Y%m%d-%H%M%S')"
-LOG_FILE="${LOG_DIR}/${MODEL_NAME}-${SUBMIT_MODE}-node${ACTOR_NUM_NODES}-rollout${ROLLOUT_NUM_GPUS}-${TIME_STAMP}.log"
+LOG_FILE="${LOG_DIR}/${MODEL_NAME}-no-sglang-quant-${SUBMIT_MODE}-node${ACTOR_NUM_NODES}-rollout${ROLLOUT_NUM_GPUS}-${TIME_STAMP}.log"
 
-echo "Submitting Qwen3.5-4B job to http://${NODE_IP}:${RAY_DASHBOARD_PORT}"
-echo "Model:      ${MODEL_PATH}"
-echo "Model args: ${MODEL_ARGS_SCRIPT}"
-echo "Data:       ${DATA_ROOT}"
-echo "Save:       ${SAVE_ROOT}"
-echo "Log:        ${LOG_FILE}"
-echo "Resume:     ${RESUME}"
-echo "Actor nodes: ${ACTOR_NUM_NODES}"
+echo "Submitting DeepSeek-R1 ${NUM_LAYERS}-layer no-SGLang-quant job to http://${NODE_IP}:${RAY_DASHBOARD_PORT}"
+echo "Model:       ${MODEL_PATH}"
+echo "Model args:  ${MODEL_ARGS_SCRIPT}"
+echo "Load mode:   ${LOAD_MODE}"
+echo "Load:        ${LOAD_PATH}"
+echo "Data:        ${DATA_ROOT}"
+echo "Save:        ${SAVE_ROOT}"
+echo "Log:         ${LOG_FILE}"
 echo "Actor GPUs per node: ${ACTOR_NUM_GPUS_PER_NODE}"
 echo "Rollout GPUs: ${ROLLOUT_NUM_GPUS}"
-echo "Rollout GPUs per engine: ${ROLLOUT_NUM_GPUS_PER_ENGINE}"
+echo "SGLang quantization: ${SGLANG_QUANTIZATION:-<disabled>}"
+echo "SGLang KV cache dtype: ${SGLANG_KV_CACHE_DTYPE:-<default>}"
 echo "Submit mode: ${SUBMIT_MODE}"
 echo "Torch profiler: ${ENABLE_TORCH_PROFILE}"
 

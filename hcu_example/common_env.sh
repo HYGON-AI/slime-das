@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# Shared DCU runtime environment. This file is sourced by the other scripts.
+# Shared HCU runtime environment. This file is sourced by the other scripts.
 
-export SLIME_ROOT="${SLIME_ROOT:-/home/dcu_slime}"
-export MEGATRON_BRIDGE_ROOT="${MEGATRON_BRIDGE_ROOT:-/home/dcu_megatron/Megatron-Bridge}"
-export MEGATRON_LM_ROOT="${MEGATRON_LM_ROOT:-/home/dcu_megatron/Megatron-LM}"
+export SLIME_ROOT="${SLIME_ROOT:-/home/hcu_slime}"
+export MEGATRON_BRIDGE_ROOT="${MEGATRON_BRIDGE_ROOT:-/home/hcu_megatron/Megatron-Bridge}"
+export MEGATRON_LM_ROOT="${MEGATRON_LM_ROOT:-/home/hcu_megatron/Megatron-LM}"
 export SGLANG_ROOT="${SGLANG_ROOT:-/home/sglang_v0.5.10}"
 
 if [[ -f /opt/dtk/env.sh ]]; then
@@ -16,7 +16,7 @@ export PATH="/opt/hyhal/bin:/opt/dtk/hip/bin:/opt/dtk/bin:/usr/local/bin:/usr/bi
 export PYTHONPATH="${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}/slime${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONBUFFERED="${PYTHONBUFFERED:-16}"
 
-# DCU/SGLang/Megatron runtime defaults. These are also present in env.yaml for
+# HCU/SGLang/Megatron runtime defaults. These are also present in env.yaml for
 # Ray Job submission, but exporting them here makes direct Ray submission work
 # without going through the Ray dashboard job agent.
 export GLOG_minloglevel="${GLOG_minloglevel:-3}"
@@ -24,7 +24,7 @@ export CUDA_DEVICE_MAX_CONNECTIONS="${CUDA_DEVICE_MAX_CONNECTIONS:-1}"
 export HSA_FORCE_FINE_GRAIN_PCIE="${HSA_FORCE_FINE_GRAIN_PCIE:-1}"
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES="${RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES:-1}"
-export USE_DCU_CUSTOM_ALLREDUCE="${USE_DCU_CUSTOM_ALLREDUCE:-1}"
+export USE_HCU_CUSTOM_ALLREDUCE="${USE_HCU_CUSTOM_ALLREDUCE:-1}"
 export SGLANG_ENABLE_JIT_DEEPGEMM="${SGLANG_ENABLE_JIT_DEEPGEMM:-0}"
 export SGLANG_KVALLOC_KERNEL="${SGLANG_KVALLOC_KERNEL:-1}"
 export SGLANG_CHUNKED_PREFIX_CACHE_THRESHOLD="${SGLANG_CHUNKED_PREFIX_CACHE_THRESHOLD:-0}"
@@ -53,7 +53,7 @@ export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/home/slime_cache}"
 export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-/home/torchinductor_cache}"
 export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-/home/triton_cache}"
 export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-/home/torch_extensions}"
-export RAY_TMPDIR="${RAY_TMPDIR:-/dev/shm/ray_tmp_dcu}"
+export RAY_TMPDIR="${RAY_TMPDIR:-/dev/shm/ray_tmp_hcu}"
 
 export RAY_PORT="${RAY_PORT:-63792}"
 export RAY_DASHBOARD_PORT="${RAY_DASHBOARD_PORT:-8265}"
