@@ -50,8 +50,8 @@ hcu_slime/
 
 HCU 环境使用以下适配源码（sglang_v0.5.12、hcu_megatron_v0.17.0）：
 
-- [SGLang HCU 源码](https://developer.sourcefind.cn/codes/OpenDAS/sglang)
-- [HCU Megatron-LM/Megatron-Bridge 源码](http://42.228.13.241:10068/hcutoolkit/deeplearing/hcu_megatron)
+- [SGLang HCU 源码]
+- [HCU Megatron-LM/Megatron-Bridge 源码]
 
 这些路径已经写入：
 
@@ -63,7 +63,7 @@ hcu_example/env.yaml
 如果你的路径不同，请优先修改这两个文件，或者在运行前通过环境变量覆盖：
 
 ```bash
-export SLIME_ROOT=/home/hcu_slime
+export SLIME_ROOT=<repo-root>
 export MEGATRON_BRIDGE_ROOT=/home/hcu_megatron/Megatron-Bridge
 export MEGATRON_LM_ROOT=/home/hcu_megatron/Megatron-LM
 export SGLANG_ROOT=/home/sglang_v0.5.12
@@ -80,25 +80,25 @@ export SGLANG_ROOT=/home/sglang_v0.5.12
 示例默认使用以下数据：
 
 ```bash
-/home/Download/dapo-math-17k/dapo-math-17k.jsonl
-/home/Download/aime-2024/aime-2024.jsonl
+<data-root>/dapo-math-17k/dapo-math-17k.jsonl
+<data-root>/aime-2024/aime-2024.jsonl
 ```
 
 如果没有数据，可以下载：
 
 ```bash
-hf download --repo-type dataset zhuzilin/dapo-math-17k --local-dir /home/Download/dapo-math-17k
-hf download --repo-type dataset zhuzilin/aime-2024 --local-dir /home/Download/aime-2024
+hf download --repo-type dataset zhuzilin/dapo-math-17k --local-dir <data-root>/dapo-math-17k
+hf download --repo-type dataset zhuzilin/aime-2024 --local-dir <data-root>/aime-2024
 ```
 
 Megatron 0.17 支持通过 Megatron-Bridge 直接加载 HuggingFace 权重，因此当前示例不需要提前把 HF 权重转换成 torch_dist。
 
 ## 单节点运行
 
-假设单节点 IP 是 `12.12.12.48`，使用 8 张卡：
+假设单节点 IP 是 `<head-ip>`，使用 8 张卡：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 
 ray stop --force || true
 rm -rf /dev/shm/ray_tmp_hcu
@@ -110,13 +110,13 @@ export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-NUM_GPUS=8 NODE_IP=12.12.12.48 bash run_all.sh
+NUM_GPUS=8 NODE_IP=<head-ip> bash run_all.sh
 ```
 
 断点续训：
 
 ```bash
-NUM_GPUS=8 NODE_IP=12.12.12.48 bash run_all.sh --resume
+NUM_GPUS=8 NODE_IP=<head-ip> bash run_all.sh --resume
 ```
 
 ## 多节点运行
@@ -124,8 +124,8 @@ NUM_GPUS=8 NODE_IP=12.12.12.48 bash run_all.sh --resume
 标准多节点配置：
 
 ```text
-head:   12.12.12.48，8 张卡
-worker: 12.12.12.52，8 张卡
+head:   <head-ip>，8 张卡
+worker: <worker-ip>，8 张卡
 总计:   16 张卡
 ```
 
@@ -138,14 +138,14 @@ rollout: 8 卡
 
 ### 1. head 节点启动 Ray
 
-在 `12.12.12.48`：
+在 `<head-ip>`：
 
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
 rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 source common_env.sh
 
 export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
@@ -153,19 +153,19 @@ export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-NUM_GPUS=8 bash start_ray.sh 12.12.12.48
+NUM_GPUS=8 bash start_ray.sh <head-ip>
 ```
 
 ### 2. worker 节点加入 Ray
 
-在 `12.12.12.52`：
+在 `<worker-ip>`：
 
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
 rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 source common_env.sh
 
 export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
@@ -173,13 +173,13 @@ export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-NUM_GPUS=8 bash start_ray_worker.sh 12.12.12.48 12.12.12.52
+NUM_GPUS=8 bash start_ray_worker.sh <head-ip> <worker-ip>
 ```
 
 ### 3. head 节点检查资源
 
 ```bash
-ray status --address=12.12.12.48:63792
+ray status --address=<head-ip>:63792
 ```
 
 应看到：
@@ -193,10 +193,10 @@ ray status --address=12.12.12.48:63792
 多节点推荐使用 `direct` 模式，不走 Ray dashboard job server：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 
 SUBMIT_MODE=direct \
-RAY_HEAD_ADDRESS=12.12.12.48:63792 \
+RAY_HEAD_ADDRESS=<head-ip>:63792 \
 ACTOR_NUM_NODES=2 \
 ACTOR_NUM_GPUS_PER_NODE=4 \
 ROLLOUT_NUM_GPUS=8 \
@@ -232,7 +232,7 @@ ACTOR_NUM_GPUS_PER_NODE=4
 ROLLOUT_NUM_GPUS=8
 ROLLOUT_NUM_GPUS_PER_ENGINE=4
 
-LOG_DIR=/home/hcu_slime/hcu_example/logs
+LOG_DIR=<repo-root>/hcu_example/logs
 ```
 
 训练日志会自动保存到 `LOG_DIR`，默认是 `hcu_example/logs`。日志文件名会带时间戳，例如：
@@ -264,4 +264,9 @@ Qwen3-4B-direct-node2-rollout8-20260709-143000.log
 hcu_example/README.md
 ```
 
+## 来源说明
 
+本项目基于 [THUDM/slime](https://github.com/THUDM/slime) 进行 HCU 适配开发。
+原始版权声明、LICENSE 和 NOTICE 文件保持不变。
+
+HCU 相关适配、示例脚本和文档由 Hygon Information Technology Co., Ltd. 维护。

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
-HEAD_IP="${1:-${HEAD_IP:-12.12.12.48}}"
+HEAD_IP="${1:-${HEAD_IP:-127.0.0.1}}"
 WORKER_IP="${2:-${WORKER_IP:-$(hostname -I | awk '{print $1}')}}"
 NUM_GPUS="${NUM_GPUS:-8}"
 

@@ -28,7 +28,7 @@ hcu_example/
 进入目录并安装依赖：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 /usr/bin/python3 -m pip install -r requirements-hcu.txt
 chmod +x *.sh
 ```
@@ -37,9 +37,9 @@ chmod +x *.sh
 
 ```text
 模型: /model/qwen3/Qwen3-4B
-数据: /home/Download/dapo-math-17k/dapo-math-17k.jsonl
-评测: /home/Download/aime-2024/aime-2024.jsonl
-保存: /home/Download/qwen3/Qwen3-4B_slime
+数据: <data-root>/dapo-math-17k/dapo-math-17k.jsonl
+评测: <data-root>/aime-2024/aime-2024.jsonl
+保存: <data-root>/qwen3/Qwen3-4B_slime
 ```
 
 重要：多节点 Ray 的临时目录必须使用节点本地路径，不能放共享 `/home`。
@@ -56,10 +56,10 @@ Could not connect to socket .../sockets/raylet.1
 
 ## 单节点运行
 
-假设单节点 IP 为 `12.12.12.48`，使用 8 张卡：
+假设单节点 IP 为 `<head-ip>`，使用 8 张卡：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 
 ray stop --force || true
 rm -rf /dev/shm/ray_tmp_hcu
@@ -71,22 +71,22 @@ export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-NUM_GPUS=8 NODE_IP=12.12.12.48 bash run_all.sh
+NUM_GPUS=8 NODE_IP=<head-ip> bash run_all.sh
 ```
 
 断点续训：
 
 ```bash
-NUM_GPUS=8 NODE_IP=12.12.12.48 bash run_all.sh --resume
+NUM_GPUS=8 NODE_IP=<head-ip> bash run_all.sh --resume
 ```
 
 也可以分步启动 Ray 和提交训练：
 
 ```bash
-NUM_GPUS=8 bash start_ray.sh 12.12.12.48
+NUM_GPUS=8 bash start_ray.sh <head-ip>
 
 SUBMIT_MODE=direct \
-RAY_HEAD_ADDRESS=12.12.12.48:63792 \
+RAY_HEAD_ADDRESS=<head-ip>:63792 \
 ACTOR_NUM_NODES=1 \
 ACTOR_NUM_GPUS_PER_NODE=4 \
 ROLLOUT_NUM_GPUS=4 \
@@ -99,8 +99,8 @@ bash run_qwen3_4b.sh --node-ip 127.0.0.1
 标准多节点配置：
 
 ```text
-head:   12.12.12.48，8 张卡
-worker: 12.12.12.52，8 张卡
+head:   <head-ip>，8 张卡
+worker: <worker-ip>，8 张卡
 总计:   16 张卡
 ```
 
@@ -113,14 +113,14 @@ rollout: 8 卡
 
 ### 1. head 节点启动 Ray
 
-在 `12.12.12.48` 上执行：
+在 `<head-ip>` 上执行：
 
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
 rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 source common_env.sh
 
 export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
@@ -128,19 +128,19 @@ export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-NUM_GPUS=8 bash start_ray.sh 12.12.12.48
+NUM_GPUS=8 bash start_ray.sh <head-ip>
 ```
 
 ### 2. worker 节点加入 Ray
 
-在 `12.12.12.52` 上执行：
+在 `<worker-ip>` 上执行：
 
 ```bash
 ray stop --force || true
 pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
 rm -rf /dev/shm/ray_tmp_hcu
 
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 source common_env.sh
 
 export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
@@ -148,15 +148,15 @@ export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-NUM_GPUS=8 bash start_ray_worker.sh 12.12.12.48 12.12.12.52
+NUM_GPUS=8 bash start_ray_worker.sh <head-ip> <worker-ip>
 ```
 
 ### 3. head 节点检查资源
 
-回到 `12.12.12.48`：
+回到 `<head-ip>`：
 
 ```bash
-ray status --address=12.12.12.48:63792
+ray status --address=<head-ip>:63792
 ```
 
 应看到：
@@ -168,7 +168,7 @@ ray status --address=12.12.12.48:63792
 可选：检查 Ray actor 是否能看到 HIP GPU。
 
 ```bash
-RAY_ADDRESS=12.12.12.48:63792 python3 - <<'PY'
+RAY_ADDRESS=<head-ip>:63792 python3 - <<'PY'
 import ray
 ray.init(address="auto")
 
@@ -192,10 +192,10 @@ PY
 推荐多节点使用 `direct` 模式，不走 Ray dashboard job server：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 
 SUBMIT_MODE=direct \
-RAY_HEAD_ADDRESS=12.12.12.48:63792 \
+RAY_HEAD_ADDRESS=<head-ip>:63792 \
 ACTOR_NUM_NODES=2 \
 ACTOR_NUM_GPUS_PER_NODE=4 \
 ROLLOUT_NUM_GPUS=8 \
@@ -231,13 +231,13 @@ ACTOR_NUM_GPUS_PER_NODE=4
 ROLLOUT_NUM_GPUS=8
 ROLLOUT_NUM_GPUS_PER_ENGINE=4
 
-LOG_DIR=/home/hcu_slime/hcu_example/logs
+LOG_DIR=<repo-root>/hcu_example/logs
 ```
 
 训练日志会自动保存到 `LOG_DIR`，默认是：
 
 ```text
-/home/hcu_slime/hcu_example/logs
+<repo-root>/hcu_example/logs
 ```
 
 日志文件名包含模型名、提交模式、节点配置和时间，例如：
@@ -265,15 +265,15 @@ Qwen3.5-4B 的 HuggingFace 目录是 Qwen3.5/VL 风格配置，直接使用 Mega
 在容器内执行：
 
 ```bash
-cd /home/hcu_slime/slime
+cd <repo-root>/slime
 
-source /home/hcu_slime/hcu_example/common_env.sh
+source <repo-root>/hcu_example/common_env.sh
 source scripts/models/qwen3.5-4B.sh
 
 python tools/convert_hf_to_torch_dist.py \
   "${MODEL_ARGS[@]}" \
   --hf-checkpoint /model/qwen3.5/Qwen3.5-4B \
-  --save /home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
+  --save <data-root>/qwen3.5/Qwen3.5-4B_torch_dist \
   --use-cpu-initialization \
   --no-gradient-accumulation-fusion
 ```
@@ -287,15 +287,15 @@ python tools/convert_hf_to_torch_dist.py \
 转换成功后，应存在：
 
 ```text
-/home/Download/qwen3.5/Qwen3.5-4B_torch_dist/latest_checkpointed_iteration.txt
+<data-root>/qwen3.5/Qwen3.5-4B_torch_dist/latest_checkpointed_iteration.txt
 ```
 
 ### 2. 启动 Ray
 
-单节点 8 卡示例，假设当前机器 IP 是 `12.12.12.52`：
+单节点 8 卡示例，假设当前机器 IP 是 `<worker-ip>`：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 
 ray stop --force || true
 rm -rf /dev/shm/ray_tmp_hcu
@@ -307,13 +307,13 @@ export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
 export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 
-NUM_GPUS=8 bash start_ray.sh 12.12.12.52
+NUM_GPUS=8 bash start_ray.sh <worker-ip>
 ```
 
 检查 Ray：
 
 ```bash
-ray status --address=12.12.12.52:63792
+ray status --address=<worker-ip>:63792
 curl http://127.0.0.1:8265/api/version
 ```
 
@@ -322,14 +322,14 @@ curl http://127.0.0.1:8265/api/version
 使用专门的脚本：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 
 MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
-TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
-SAVE_ROOT=/home/Download/qwen3.5/Qwen3.5-4B_slime \
-MODEL_ARGS_SCRIPT=/home/hcu_slime/slime/scripts/models/qwen3.5-4B.sh \
+TORCH_DIST_PATH=<data-root>/qwen3.5/Qwen3.5-4B_torch_dist \
+SAVE_ROOT=<data-root>/qwen3.5/Qwen3.5-4B_slime \
+MODEL_ARGS_SCRIPT=<repo-root>/slime/scripts/models/qwen3.5-4B.sh \
 SUBMIT_MODE=direct \
-RAY_HEAD_ADDRESS=12.12.12.52:63792 \
+RAY_HEAD_ADDRESS=<worker-ip>:63792 \
 ACTOR_NUM_NODES=1 \
 ACTOR_NUM_GPUS_PER_NODE=4 \
 TENSOR_MODEL_PARALLEL_SIZE=4 \
@@ -358,17 +358,17 @@ bash run_qwen3.5_4b.sh --node-ip 127.0.0.1
 
 ### 4. 断点续训
 
-如果 `/home/Download/qwen3.5/Qwen3.5-4B_slime/latest_checkpointed_iteration.txt` 已存在，可以加 `--resume`：
+如果 `<data-root>/qwen3.5/Qwen3.5-4B_slime/latest_checkpointed_iteration.txt` 已存在，可以加 `--resume`：
 
 ```bash
-cd /home/hcu_slime/hcu_example
+cd <repo-root>/hcu_example
 
 MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
-TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
-SAVE_ROOT=/home/Download/qwen3.5/Qwen3.5-4B_slime \
-MODEL_ARGS_SCRIPT=/home/hcu_slime/slime/scripts/models/qwen3.5-4B.sh \
+TORCH_DIST_PATH=<data-root>/qwen3.5/Qwen3.5-4B_torch_dist \
+SAVE_ROOT=<data-root>/qwen3.5/Qwen3.5-4B_slime \
+MODEL_ARGS_SCRIPT=<repo-root>/slime/scripts/models/qwen3.5-4B.sh \
 SUBMIT_MODE=direct \
-RAY_HEAD_ADDRESS=12.12.12.52:63792 \
+RAY_HEAD_ADDRESS=<worker-ip>:63792 \
 ACTOR_NUM_NODES=1 \
 ACTOR_NUM_GPUS_PER_NODE=4 \
 TENSOR_MODEL_PARALLEL_SIZE=4 \

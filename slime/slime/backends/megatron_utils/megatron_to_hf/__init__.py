@@ -11,7 +11,7 @@ from .qwen3_5 import convert_qwen3_5_to_hf
 from .qwen3_next import convert_qwen3_next_to_hf
 from .qwen3_vl import convert_qwen3vl_to_hf
 from .qwen3moe import convert_qwen3moe_to_hf
-
+from .glm5 import convert_glm5_to_hf
 
 # TODO unify w/ `convert_to_hf`
 def postprocess_hf_param(args, megatron_param_name, hf_param_name, param):
@@ -37,6 +37,8 @@ _cached_tensors = {}
 def _convert_to_hf_core(args, model_name, name, param):
     if "minimaxm2" in model_name or "minimax_m2" in model_name:
         converted_named_tensors = convert_minimax_m2_to_hf(args, name, param)
+    elif "glm5" in model_name or "glm_moe_dsa" in model_name or "glmmodsa" in model_name or "glmmoedsa" in model_name:
+        converted_named_tensors = convert_glm5_to_hf(args, name, param)
     elif "glm4moelite" in model_name or "deepseekv3" in model_name:
         converted_named_tensors = convert_deepseekv3_to_hf(args, name, param)
     elif "glm4moe" in model_name:

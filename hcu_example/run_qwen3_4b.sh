@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
-NODE_IP="${NODE_IP:-12.12.12.48}"
+NODE_IP="${NODE_IP:-127.0.0.1}"
 MODEL_PATH="${MODEL_PATH:-/model/qwen3/Qwen3-4B}"
 MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/slime/scripts/models/qwen3-4B.sh}"
 DATA_ROOT="${DATA_ROOT:-/home/Download}"

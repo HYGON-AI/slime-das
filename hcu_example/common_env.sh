@@ -3,6 +3,7 @@
 # Shared HCU runtime environment. This file is sourced by the other scripts.
 
 export SLIME_ROOT="${SLIME_ROOT:-/home/hcu_slime}"
+export MEGATRON_HCU_ROOT="${MEGATRON_HCU_ROOT:-/home/hcu_megatron}"
 export MEGATRON_BRIDGE_ROOT="${MEGATRON_BRIDGE_ROOT:-/home/hcu_megatron/Megatron-Bridge}"
 export MEGATRON_LM_ROOT="${MEGATRON_LM_ROOT:-/home/hcu_megatron/Megatron-LM}"
 export SGLANG_ROOT="${SGLANG_ROOT:-/home/sglang_v0.5.10}"
@@ -13,7 +14,7 @@ if [[ -f /opt/dtk/env.sh ]]; then
 fi
 
 export PATH="/opt/hyhal/bin:/opt/dtk/hip/bin:/opt/dtk/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
-export PYTHONPATH="${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}/slime${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${MEGATRON_HCU_ROOT}:${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}/slime${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONBUFFERED="${PYTHONBUFFERED:-16}"
 
 # HCU/SGLang/Megatron runtime defaults. These are also present in env.yaml for
@@ -70,6 +71,8 @@ export SGLANG_ASSIGN_REQ_TO_TOKEN_POOL="${SGLANG_ASSIGN_REQ_TO_TOKEN_POOL:-1}"
 export SGLANG_GET_LAST_LOC="${SGLANG_GET_LAST_LOC:-1}"
 export SGLANG_CREATE_FLASHMLA_KV_INDICES_TRITON="${SGLANG_CREATE_FLASHMLA_KV_INDICES_TRITON:-1}"
 export SGLANG_CREATE_CHUNKED_PREFIX_CACHE_KV_INDICES="${SGLANG_CREATE_CHUNKED_PREFIX_CACHE_KV_INDICES:-1}"
+export SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK=1
+export SGLANG_ENABLE_TP_MEMORY_INBALANCE_CHECK=0
 
 mkdir -p \
   "${TMPDIR}" \

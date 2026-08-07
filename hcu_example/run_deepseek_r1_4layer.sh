@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
-NODE_IP="${NODE_IP:-12.12.12.5}"
+NODE_IP="${NODE_IP:-127.0.0.1}"
 MODEL_PATH="${MODEL_PATH:-/home/Download/deepseek/DeepSeek-R1-4layers}"
 TORCH_DIST_PATH="${TORCH_DIST_PATH:-/home/Download/deepseek/DeepSeek-R1-4layers_torch_dist}"
 DATA_ROOT="${DATA_ROOT:-/home/Download}"

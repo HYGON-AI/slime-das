@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/common_env.sh"
 
-NODE_IP="${1:-${NODE_IP:-12.12.12.48}}"
+NODE_IP="${1:-${NODE_IP:-127.0.0.1}}"
 NUM_GPUS="${NUM_GPUS:-8}"
 
 echo "Starting Ray head at ${NODE_IP}:${RAY_PORT} (dashboard ${RAY_DASHBOARD_PORT})"
