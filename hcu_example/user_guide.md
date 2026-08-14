@@ -75,10 +75,10 @@ export SGLANG_ROOT=<path-to-sglang>
 | Qwen3-4B | 标准训练 | `run_qwen3_4b.sh` |
 | Qwen3-4B | 全异步 rollout 训练 | `run_qwen3_4b_fully_async.sh` |
 | Qwen3.5-4B | `torch_dist` checkpoint 训练 | `run_qwen3.5_4b.sh` |
-| GLM-4.6（4 层） | 功能冒烟测试 | `run_glm4.6_4layer.sh` |
-| GLM-5（4 层） | 功能冒烟测试 | `run_glm5_4layer.sh` |
-| DeepSeek-R1（4 层） | 功能冒烟测试 | `run_deepseek_r1_4layer.sh` |
-| DeepSeek-R1-Distill-Llama-70B（4 层） | 功能冒烟测试 | `run_deepseek_r1_distill_llama_70b_4layer.sh` |
+| GLM-4.6（4 层） | 功能验证示例 | `run_glm4.6_4layer.sh` |
+| GLM-5（4 层） | 功能验证示例 | `run_glm5_4layer.sh` |
+| DeepSeek-R1（4 层） | 功能验证示例 | `run_deepseek_r1_4layer.sh` |
+| DeepSeek-R1-Distill-Llama-70B（4 层） | 功能验证示例 | `run_deepseek_r1_distill_llama_70b_4layer.sh` |
 
 四层示例用于验证软件流程，不能作为完整模型的性能基准。
 
@@ -217,7 +217,7 @@ SUBMIT_MODE=direct \
 bash run_qwen3.5_4b.sh --node-ip <head-node-ip>
 ```
 
-## 7. GLM 和 DeepSeek 冒烟测试
+## 7. GLM 和 DeepSeek 功能验证示例
 
 GLM 和 DeepSeek 脚本采用相同模式：设置模型、数据和输出路径后，执行对应脚本。
 

@@ -78,10 +78,10 @@ bash run_qwen3_4b.sh
 | Qwen3-4B | 标准训练 | `hcu_example/run_qwen3_4b.sh` |
 | Qwen3-4B | 全异步 rollout 训练 | `hcu_example/run_qwen3_4b_fully_async.sh` |
 | Qwen3.5-4B | `torch_dist` checkpoint 训练 | `hcu_example/run_qwen3.5_4b.sh` |
-| GLM-4.6（4 层） | 功能冒烟测试 | `hcu_example/run_glm4.6_4layer.sh` |
-| GLM-5（4 层） | 功能冒烟测试 | `hcu_example/run_glm5_4layer.sh` |
-| DeepSeek-R1（4 层） | 功能冒烟测试 | `hcu_example/run_deepseek_r1_4layer.sh` |
-| DeepSeek-R1-Distill-Llama-70B（4 层） | 功能冒烟测试 | `hcu_example/run_deepseek_r1_distill_llama_70b_4layer.sh` |
+| GLM-4.6（4 层） | 功能验证示例 | `hcu_example/run_glm4.6_4layer.sh` |
+| GLM-5（4 层） | 功能验证示例 | `hcu_example/run_glm5_4layer.sh` |
+| DeepSeek-R1（4 层） | 功能验证示例 | `hcu_example/run_deepseek_r1_4layer.sh` |
+| DeepSeek-R1-Distill-Llama-70B（4 层） | 功能验证示例 | `hcu_example/run_deepseek_r1_distill_llama_70b_4layer.sh` |
 
 ## 依赖说明
 
