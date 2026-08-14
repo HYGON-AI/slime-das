@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
 # DeepSeek-R1-Distill-Llama-70B RL smoke test for HCU slime.

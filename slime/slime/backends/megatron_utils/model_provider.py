@@ -1,3 +1,5 @@
+# Modifications Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
 # Adapt from https://github.com/NVIDIA/Megatron-LM/blob/b1efb3c7126ef7615e8c333432d76e08038e17ff/pretrain_gpt.py
 import argparse
 import inspect
@@ -96,7 +98,7 @@ def _get_model_provider_func(
         provider.sequence_parallel = args.sequence_parallel
         provider.context_parallel_size = args.context_parallel_size
         provider.variable_seq_lengths = args.variable_seq_lengths
-        provider.gradient_accumulation_fusion = getattr(args, "gradient_accumulation_fusion", False) #nhb
+        provider.gradient_accumulation_fusion = getattr(args, "gradient_accumulation_fusion", False)
         if hasattr(args, "moe_token_dispatcher_type"):
             provider.moe_token_dispatcher_type = args.moe_token_dispatcher_type
         if getattr(args, "decoder_first_pipeline_num_layers", None) is not None:
@@ -170,7 +172,7 @@ def _get_model_provider_func(
                         moe_grouped_gemm=args.moe_grouped_gemm,
                         qk_layernorm=args.qk_layernorm,
                         multi_latent_attention=args.multi_latent_attention,
-                        # moe_use_legacy_grouped_gemm=args.moe_use_legacy_grouped_gemm, #nhb
+                        # moe_use_legacy_grouped_gemm=args.moe_use_legacy_grouped_gemm,
                     )
                 else:
                     transformer_layer_spec = get_gpt_layer_local_spec(
@@ -178,7 +180,7 @@ def _get_model_provider_func(
                         moe_grouped_gemm=args.moe_grouped_gemm,
                         qk_layernorm=args.qk_layernorm,
                         multi_latent_attention=args.multi_latent_attention,
-                        # moe_use_legacy_grouped_gemm=args.moe_use_legacy_grouped_gemm, #nhb
+                        # moe_use_legacy_grouped_gemm=args.moe_use_legacy_grouped_gemm,
 
                     )
 

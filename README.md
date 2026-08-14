@@ -1,272 +1,111 @@
-# HCU Slime
+# slime-das
 
-基于 [THUDM/slime](https://github.com/THUDM/slime) v0.3.0 的 HCU 适配版本，支持在 HCU 环境下使用 Megatron-LM、Megatron-Bridge 和 SGLang 进行 RL 训练。
-
-当前仓库提供了一个已经跑通的 Qwen3-4B 示例，示例脚本统一放在 `hcu_example/` 目录下。
+slime-das 是基于 [THUDM/slime](https://github.com/THUDM/slime) v0.3.0 的 HCU 平台适配版本，用于基于 Megatron-LM 和 SGLang 的大规模强化学习训练。
 
 ## 特性
 
-- 支持 HCU Docker 环境运行
-- 支持 Qwen3-4B 示例训练
-- 支持 Megatron-Bridge 直接加载 HuggingFace 权重
-- 支持 Ray + SGLang rollout + Megatron actor training
-- 提供一键运行脚本和断点续训脚本
+- 支持 HCU 平台训练和 rollout
+- 支持 Ray 分布式资源调度
+- 支持 SGLang rollout 服务
+- 支持 Megatron-LM Actor 训练
+- 支持通过 Megatron-Bridge 加载 HuggingFace 模型权重
+- 提供 Qwen、GLM 和 DeepSeek 模型训练示例
 
 ## 目录结构
 
 ```text
-hcu_slime/
-├── hcu_example/          # HCU Qwen3-4B 训练示例脚本
-│   ├── common_env.sh     # 通用环境变量
-│   ├── env.yaml          # Ray runtime env
-│   ├── README.md         # 示例脚本说明
-│   ├── run_all.sh        # 一键启动 Ray 并提交训练
-│   ├── run_qwen3_4b.sh   # 提交 Qwen3-4B 训练任务
-│   ├── start_ray.sh      # 启动 Ray head
-│   └── stop_ray.sh       # 停止 Ray
-├── slime/                # slime 源码
-├── requirements-hcu.txt  # 当前 HCU Docker 环境导出的依赖记录
-└── usage_hcu.md          # 旧版 HCU 使用说明
+slime-das/
+├── hcu_example/             # HCU 示例、环境配置和启动脚本
+├── slime/                   # slime 上游源码及 HCU 平台适配
+├── requirements-hcu.txt     # 项目直接 Python 依赖
+├── LICENSE                  # Apache License 2.0
+└── README.md
 ```
 
-## Docker 基础环境
+## 环境要求
 
-当前示例验证使用的 Docker 镜像为：
+- Linux
+- Python 3.10 或更高版本
+- 已完成 HCU 驱动和运行时环境配置
+- 已安装 HCU 版本的 PyTorch、SGLang、Megatron-LM、Megatron-Bridge 和 `torch_memory_saver`
+
+> HCU 设备运行时、PyTorch、SGLang 和 Megatron-LM 等底层组件由 HCU 基础镜像或软件栈提供，不包含在 `requirements-hcu.txt` 中。
+
+## 安装
 
 ```bash
-42.228.13.241:5000/jenkins/model_test_env/sglang:daily-20260507-1407
+git clone https://github.com/HYGON-AI/slime-das.git
+cd slime-das
+
+python -m pip install -r requirements-hcu.txt
 ```
 
+## 配置外部组件路径
 
-## Python 依赖
-
-通过仓库已经有 `requirements-hcu.txt`，可以直接安装：
+请根据实际环境设置外部组件路径：
 
 ```bash
-/usr/bin/python3 -m pip install -r requirements-hcu.txt
+export SLIME_ROOT="$(pwd)"
+export MEGATRON_BRIDGE_ROOT=<path-to-megatron-bridge>
+export MEGATRON_LM_ROOT=<path-to-megatron-lm>
+export SGLANG_ROOT=<path-to-sglang>
 ```
 
-## 外部源码依赖路径
+也可以在 `hcu_example/common_env.sh` 中设置默认值。
 
-HCU 环境使用以下适配源码（sglang_v0.5.12、hcu_megatron_v0.17.0）：
+## 快速开始
 
-- [SGLang HCU 源码]
-- [HCU Megatron-LM/Megatron-Bridge 源码]
-
-这些路径已经写入：
-
-```text
-hcu_example/common_env.sh
-hcu_example/env.yaml
-```
-
-如果你的路径不同，请优先修改这两个文件，或者在运行前通过环境变量覆盖：
+以下示例启动 Qwen3-4B 训练：
 
 ```bash
-export SLIME_ROOT=<repo-root>
-export MEGATRON_BRIDGE_ROOT=/home/hcu_megatron/Megatron-Bridge
-export MEGATRON_LM_ROOT=/home/hcu_megatron/Megatron-LM
-export SGLANG_ROOT=/home/sglang_v0.5.12
-```
-
-## 数据和模型准备
-
-示例默认使用 Qwen3-4B 模型：
-
-```bash
-/model/qwen3/Qwen3-4B
-```
-
-示例默认使用以下数据：
-
-```bash
-<data-root>/dapo-math-17k/dapo-math-17k.jsonl
-<data-root>/aime-2024/aime-2024.jsonl
-```
-
-如果没有数据，可以下载：
-
-```bash
-hf download --repo-type dataset zhuzilin/dapo-math-17k --local-dir <data-root>/dapo-math-17k
-hf download --repo-type dataset zhuzilin/aime-2024 --local-dir <data-root>/aime-2024
-```
-
-Megatron 0.17 支持通过 Megatron-Bridge 直接加载 HuggingFace 权重，因此当前示例不需要提前把 HF 权重转换成 torch_dist。
-
-## 单节点运行
-
-假设单节点 IP 是 `<head-ip>`，使用 8 张卡：
-
-```bash
-cd <repo-root>/hcu_example
-
-ray stop --force || true
-rm -rf /dev/shm/ray_tmp_hcu
-
+cd hcu_example
 source common_env.sh
 
-export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
-export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
-export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-
-NUM_GPUS=8 NODE_IP=<head-ip> bash run_all.sh
-```
-
-断点续训：
-
-```bash
-NUM_GPUS=8 NODE_IP=<head-ip> bash run_all.sh --resume
-```
-
-## 多节点运行
-
-标准多节点配置：
-
-```text
-head:   <head-ip>，8 张卡
-worker: <worker-ip>，8 张卡
-总计:   16 张卡
-```
-
-资源划分：
-
-```text
-actor:   2 节点 × 每节点 4 卡 = 8 卡
-rollout: 8 卡
-```
-
-### 1. head 节点启动 Ray
-
-在 `<head-ip>`：
-
-```bash
-ray stop --force || true
-pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
-rm -rf /dev/shm/ray_tmp_hcu
-
-cd <repo-root>/hcu_example
-source common_env.sh
-
-export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
-export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
-export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-
-NUM_GPUS=8 bash start_ray.sh <head-ip>
-```
-
-### 2. worker 节点加入 Ray
-
-在 `<worker-ip>`：
-
-```bash
-ray stop --force || true
-pkill -9 raylet gcs_server plasma_store dashboard 2>/dev/null || true
-rm -rf /dev/shm/ray_tmp_hcu
-
-cd <repo-root>/hcu_example
-source common_env.sh
-
-export RAY_TMPDIR=/dev/shm/ray_tmp_hcu
-export RAY_EXPERIMENTAL_NOSET_HIP_VISIBLE_DEVICES=1
-export HIP_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-
-NUM_GPUS=8 bash start_ray_worker.sh <head-ip> <worker-ip>
-```
-
-### 3. head 节点检查资源
-
-```bash
-ray status --address=<head-ip>:63792
-```
-
-应看到：
-
-```text
-0.0/16.0 GPU
-```
-
-### 4. head 节点提交训练
-
-多节点推荐使用 `direct` 模式，不走 Ray dashboard job server：
-
-```bash
-cd <repo-root>/hcu_example
-
+MODEL_PATH=<path-to-model> \
+DATA_ROOT=<path-to-data-root> \
+SAVE_ROOT=<path-to-checkpoint-output> \
+NODE_IP=<head-node-ip> \
 SUBMIT_MODE=direct \
-RAY_HEAD_ADDRESS=<head-ip>:63792 \
-ACTOR_NUM_NODES=2 \
-ACTOR_NUM_GPUS_PER_NODE=4 \
-ROLLOUT_NUM_GPUS=8 \
-ROLLOUT_NUM_GPUS_PER_ENGINE=4 \
-bash run_qwen3_4b.sh --node-ip 127.0.0.1
+bash run_qwen3_4b.sh
 ```
 
-如果已同步默认多节点脚本，也可以直接：
+完整的环境配置、单机和多节点流程请参阅 [HCU 用户指南](hcu_example/user_guide.md)。
 
-```bash
-bash run_multinode_qwen3_4b.sh
-```
+## 支持模型
 
-断点续训：
+| 模型 | 训练流程 | 示例脚本 |
+| --- | --- | --- |
+| Qwen3-4B | 标准训练 | `hcu_example/run_qwen3_4b.sh` |
+| Qwen3-4B | 全异步 rollout 训练 | `hcu_example/run_qwen3_4b_fully_async.sh` |
+| Qwen3.5-4B | `torch_dist` checkpoint 训练 | `hcu_example/run_qwen3.5_4b.sh` |
+| GLM-4.6（4 层） | 功能冒烟测试 | `hcu_example/run_glm4.6_4layer.sh` |
+| GLM-5（4 层） | 功能冒烟测试 | `hcu_example/run_glm5_4layer.sh` |
+| DeepSeek-R1（4 层） | 功能冒烟测试 | `hcu_example/run_deepseek_r1_4layer.sh` |
+| DeepSeek-R1-Distill-Llama-70B（4 层） | 功能冒烟测试 | `hcu_example/run_deepseek_r1_distill_llama_70b_4layer.sh` |
 
-```bash
-bash run_multinode_qwen3_4b.sh --resume
-```
+## 依赖说明
 
-## 常用可调参数
+`requirements-hcu.txt` 仅包含项目直接 Python 依赖。以下组件需要按 HCU 软件栈文档或基础镜像说明提前安装：
 
-以下参数可以通过环境变量覆盖：
+- HCU 驱动和运行时
+- HCU 版本 PyTorch
+- SGLang
+- Megatron-LM
+- Megatron-Bridge
+- `torch_memory_saver`
 
-```bash
-NUM_ROLLOUT=1000
-ROLLOUT_MAX_RESPONSE_LEN=4096
-EVAL_MAX_RESPONSE_LEN=4096
-MAX_TOKENS_PER_GPU=6144
-KL_LOSS_COEF=0.0
+## 上游项目与版权
 
-ACTOR_NUM_NODES=2
-ACTOR_NUM_GPUS_PER_NODE=4
-ROLLOUT_NUM_GPUS=8
-ROLLOUT_NUM_GPUS_PER_ENGINE=4
+本项目基于 [THUDM/slime](https://github.com/THUDM/slime) 进行 HCU 平台适配开发。
 
-LOG_DIR=<repo-root>/hcu_example/logs
-```
+上游项目采用 Apache License 2.0。本仓库保留上游版权声明和 [LICENSE](LICENSE) 文件。
 
-训练日志会自动保存到 `LOG_DIR`，默认是 `hcu_example/logs`。日志文件名会带时间戳，例如：
+HCU 平台适配、示例脚本和文档的修改版权归属：
 
 ```text
-Qwen3-4B-direct-node2-rollout8-20260709-143000.log
+Copyright (c) 2026 Hygon Information Technology Co., Ltd.
 ```
 
-## 本示例做的主要改进
+## 开源许可
 
-相比手动执行一长串命令，`hcu_example/` 对运行流程做了如下整理：
-
-- 将通用环境变量统一放到 `common_env.sh`
-- 将 Ray runtime env 统一放到 `env.yaml`
-- 提供 `run_all.sh` 一键启动 Ray 并提交任务
-- 提供 `start_ray.sh`、`stop_ray.sh` 独立管理 Ray
-- 将 Ray、Triton、Torch 编译缓存放到 `/home`，避免 `/tmp` 或 Docker overlay 空间不足
-- 固定 Ray 端口，避免 dashboard 和 job submit 地址混乱
-- 通过 `PYTHONPATH` 导入 Megatron-LM、Megatron-Bridge、SGLang 和 slime
-- 默认开启 `USE_HCU_CUSTOM_ALLREDUCE=1`
-- 默认使用 Megatron-Bridge 直接加载 HuggingFace 权重
-- 支持 `--resume` 从最近 checkpoint 继续训练
-
-## 更多说明
-
-更多脚本细节见：
-
-```text
-hcu_example/README.md
-```
-
-## 来源说明
-
-本项目基于 [THUDM/slime](https://github.com/THUDM/slime) 进行 HCU 适配开发。
-原始版权声明、LICENSE 和 NOTICE 文件保持不变。
-
-HCU 相关适配、示例脚本和文档由 Hygon Information Technology Co., Ltd. 维护。
+本项目采用 [Apache License 2.0](LICENSE)。

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
 # HCU fully-async rollout smoke test for Qwen3-4B.

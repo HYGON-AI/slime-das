@@ -1,3 +1,6 @@
+# Modifications Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
+
 import dataclasses
 import gc
 import logging
@@ -229,7 +232,7 @@ def setup_model_and_optimizer(
         config=config,
         model_chunks=model,
         #use_gloo_process_groups=args.enable_gloo_process_groups,
-        use_gloo_process_groups=getattr( #nhb
+        use_gloo_process_groups=getattr(
             args,
             "enable_gloo_process_groups",
             getattr(args, "use_gloo_process_groups", False),

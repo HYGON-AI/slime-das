@@ -1,3 +1,6 @@
+# Modifications Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
+
 import logging
 import random
 
@@ -50,7 +53,7 @@ def _initialize_distributed(args, get_embedding_ranks=None, get_position_embeddi
         get_embedding_ranks=get_embedding_ranks,
         get_position_embedding_ranks=get_position_embedding_ranks,
         #create_gloo_process_groups=args.enable_gloo_process_groups,
-        create_gloo_process_groups=getattr( #nhb
+        create_gloo_process_groups=getattr(
             args,
             "enable_gloo_process_groups",
             getattr(args, "use_gloo_process_groups", False),

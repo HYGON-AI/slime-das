@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
 # HCU Qwen3.5-4B example using only packages installed inside the Docker image.
@@ -6,8 +8,8 @@ set -euo pipefail
 # This script intentionally does NOT:
 #   - source common_env.sh
 #   - source slime/scripts/models/qwen3.5-4B.sh
-#   - run /home/hcu_slime/slime/train.py by file path
-#   - add /home/hcu_slime, /home/hcu_megatron, or /home/sglang_v0.5.10 to PYTHONPATH
+#   - run train.py by file path
+#   - add local source checkouts to PYTHONPATH
 #
 # It is meant for validating the wheel/site-packages installation.
 
@@ -85,7 +87,7 @@ Example:
   MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
   TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
   RAY_HEAD_ADDRESS=127.0.0.1:63888 \
-  bash /home/hcu_slime/hcu_example/run_qwen3.5_4b.sh --node-ip 127.0.0.1
+  bash <path-to-slime-das>/hcu_example/run_qwen3.5_4b.sh --node-ip 127.0.0.1
 EOF
 }
 

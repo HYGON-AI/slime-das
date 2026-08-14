@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
 
 # Shared HCU runtime environment. This file is sourced by the other scripts.
 
-export SLIME_ROOT="${SLIME_ROOT:-/home/hcu_slime}"
-export MEGATRON_HCU_ROOT="${MEGATRON_HCU_ROOT:-/home/hcu_megatron}"
-export MEGATRON_BRIDGE_ROOT="${MEGATRON_BRIDGE_ROOT:-/home/hcu_megatron/Megatron-Bridge}"
-export MEGATRON_LM_ROOT="${MEGATRON_LM_ROOT:-/home/hcu_megatron/Megatron-LM}"
-export SGLANG_ROOT="${SGLANG_ROOT:-/home/sglang_v0.5.10}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+export SLIME_ROOT="${SLIME_ROOT:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
+
+: "${MEGATRON_BRIDGE_ROOT:?Set MEGATRON_BRIDGE_ROOT to the Megatron-Bridge checkout.}"
+: "${MEGATRON_LM_ROOT:?Set MEGATRON_LM_ROOT to the Megatron-LM checkout.}"
+: "${SGLANG_ROOT:?Set SGLANG_ROOT to the SGLang checkout.}"
 
 if [[ -f /opt/dtk/env.sh ]]; then
   # shellcheck disable=SC1091
@@ -14,7 +17,7 @@ if [[ -f /opt/dtk/env.sh ]]; then
 fi
 
 export PATH="/opt/hyhal/bin:/opt/dtk/hip/bin:/opt/dtk/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
-export PYTHONPATH="${MEGATRON_HCU_ROOT}:${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}/slime${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}/slime${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONBUFFERED="${PYTHONBUFFERED:-16}"
 
 # HCU/SGLang/Megatron runtime defaults. These are also present in env.yaml for
@@ -50,10 +53,10 @@ export ALLREDUCE_STREAM_WITH_COMPUTE="${ALLREDUCE_STREAM_WITH_COMPUTE:-1}"
 export TMPDIR="${TMPDIR:-/dev/shm}"
 export TEMP="${TEMP:-${TMPDIR}}"
 export TMP="${TMP:-${TMPDIR}}"
-export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/home/slime_cache}"
-export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-/home/torchinductor_cache}"
-export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-/home/triton_cache}"
-export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-/home/torch_extensions}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${SLIME_ROOT}/.cache}"
+export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-${XDG_CACHE_HOME}/torchinductor}"
+export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-${XDG_CACHE_HOME}/triton}"
+export TORCH_EXTENSIONS_DIR="${TORCH_EXTENSIONS_DIR:-${XDG_CACHE_HOME}/torch_extensions}"
 export RAY_TMPDIR="${RAY_TMPDIR:-/dev/shm/ray_tmp_hcu}"
 
 export RAY_PORT="${RAY_PORT:-63792}"

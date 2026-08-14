@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
 # HCU slime smoke test for DeepSeek-R1 sliced to 4 layers.
