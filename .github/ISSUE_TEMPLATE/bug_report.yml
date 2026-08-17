@@ -1,0 +1,64 @@
+name: Bug 报告
+description: 报告 slime-das 在 HCU 平台上的可复现问题。
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你帮助改进 slime-das。提交前请先阅读 [HCU 用户指南](https://github.com/HYGON-AI/slime-das/blob/main/hcu_example/user_guide.md)，并搜索现有 Issue。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 请清晰说明实际行为与预期行为。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现步骤
+      description: 请提供可复现的命令、配置及必要的脱敏信息。
+      placeholder: |
+        1. 执行命令：...
+        2. 使用配置：...
+        3. 观察到：...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      value: |
+        - slime-das 版本或 commit：
+        - HCU 型号与数量：
+        - HCU 驱动和运行时版本：
+        - Python 版本：
+        - PyTorch 版本：
+        - SGLang 版本：
+        - Megatron-LM / Megatron-Bridge 版本：
+        - 操作系统：
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志和报错信息
+      description: 请删除密码、令牌、内部地址和模型私有路径后，再粘贴完整报错与关键日志。
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前检查
+      options:
+        - label: 我已阅读 HCU 用户指南。
+          required: true
+        - label: 我已搜索 [现有 Issue](https://github.com/HYGON-AI/slime-das/issues)，确认不是重复问题。
+          required: true
+        - label: 我已提供最小复现步骤，并已移除敏感信息。
+          required: true

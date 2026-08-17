@@ -18,7 +18,7 @@ source "${SCRIPT_DIR}/common_env.sh"
 
 NODE_IP="${NODE_IP:-127.0.0.1}"
 MODEL_PATH="${MODEL_PATH:-/model/qwen3/Qwen3-4B}"
-MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/slime/scripts/models/qwen3-4B.sh}"
+MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/scripts/models/qwen3-4B.sh}"
 DATA_ROOT="${DATA_ROOT:-/home/Download}"
 SAVE_ROOT="${SAVE_ROOT:-/home/Download/qwen3/Qwen3-4B_fully_async_test}"
 LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}/logs}"
@@ -236,7 +236,7 @@ echo "Rollout GPUs per engine: ${ROLLOUT_NUM_GPUS_PER_ENGINE}"
 echo "Submit mode: ${SUBMIT_MODE}"
 
 TRAIN_CMD=(
-  python3 "${SLIME_ROOT}/slime/train_async.py"
+  python3 "${SLIME_ROOT}/train_async.py"
   --actor-num-nodes "${ACTOR_NUM_NODES}"
   --actor-num-gpus-per-node "${ACTOR_NUM_GPUS_PER_NODE}"
   --rollout-num-gpus "${ROLLOUT_NUM_GPUS}"

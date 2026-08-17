@@ -44,7 +44,7 @@ docker run -it \
 
 ```bash
 cd /workspace
-git clone --recurse-submodules https://github.com/HYGON-AI/slime-das.git
+git clone https://github.com/HYGON-AI/slime-das.git
 cd slime-das
 ```
 
@@ -52,13 +52,15 @@ cd slime-das
 
 ### 1.4 安装项目依赖
 
-使用示例前，请确认基础镜像已提供 HCU 驱动和运行时、HCU 版本 PyTorch 与 SGLang、Megatron-LM、Megatron-Bridge、`torch_memory_saver`。
+使用示例前，请确认基础镜像已提供 HCU 驱动和运行时、HCU 版本 PyTorch 与 SGLang、Megatron-LM、Megatron-Bridge。
 
 在仓库根目录安装项目 Python 依赖：
 
 ```bash
-python -m pip install -r requirements-hcu.txt
+python -m pip install -r requirements.txt
 ```
+
+`requirements.txt` 包含项目直接 Python 依赖，其中包括 `torch_memory_saver`。
 
 设置外部源码路径。执行 `common_env.sh` 时，`SLIME_ROOT` 默认自动定位为当前仓库根目录：
 

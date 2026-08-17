@@ -17,7 +17,7 @@ slime-das 是基于 [THUDM/slime](https://github.com/THUDM/slime) v0.3.0 的 HCU
 slime-das/
 ├── hcu_example/             # HCU 示例、环境配置和启动脚本
 ├── slime/                   # slime 上游源码及 HCU 平台适配
-├── requirements-hcu.txt     # 项目直接 Python 依赖
+├── requirements.txt         # 项目直接 Python 依赖
 ├── LICENSE                  # Apache License 2.0
 └── README.md
 ```
@@ -27,9 +27,9 @@ slime-das/
 - Linux
 - Python 3.10 或更高版本
 - 已完成 HCU 驱动和运行时环境配置
-- 已安装 HCU 版本的 PyTorch、SGLang、Megatron-LM、Megatron-Bridge 和 `torch_memory_saver`
+- 已安装 HCU 版本的 PyTorch、SGLang、Megatron-LM 和 Megatron-Bridge
 
-> HCU 设备运行时、PyTorch、SGLang 和 Megatron-LM 等底层组件由 HCU 基础镜像或软件栈提供，不包含在 `requirements-hcu.txt` 中。
+> HCU 设备运行时、PyTorch、SGLang 和 Megatron-LM 等底层组件由 HCU 基础镜像或软件栈提供，不包含在 `requirements.txt` 中。
 
 ## 安装
 
@@ -37,7 +37,7 @@ slime-das/
 git clone https://github.com/HYGON-AI/slime-das.git
 cd slime-das
 
-python -m pip install -r requirements-hcu.txt
+python -m pip install -r requirements.txt
 ```
 
 ## 配置外部组件路径
@@ -85,20 +85,19 @@ bash run_qwen3_4b.sh
 
 ## 依赖说明
 
-`requirements-hcu.txt` 仅包含项目直接 Python 依赖。以下组件需要按 HCU 软件栈文档或基础镜像说明提前安装：
+`requirements.txt` 包含项目直接 Python 依赖，其中包括 `torch_memory_saver`。以下组件需要按 HCU 软件栈文档或基础镜像说明提前安装：
 
 - HCU 驱动和运行时
 - HCU 版本 PyTorch
 - SGLang
 - Megatron-LM
 - Megatron-Bridge
-- `torch_memory_saver`
 
 ## 上游项目与版权
 
 本项目基于 [THUDM/slime](https://github.com/THUDM/slime) 进行 HCU 平台适配开发。
 
-上游项目采用 Apache License 2.0。本仓库保留上游版权声明和 [LICENSE](LICENSE) 文件。
+上游项目采用 Apache License 2.0。本仓库保留上游版权声明、[LICENSE](LICENSE) 和 [NOTICE](NOTICE) 文件。
 
 HCU 平台适配、示例脚本和文档的修改版权归属：
 
@@ -108,4 +107,4 @@ Copyright (c) 2026 Hygon Information Technology Co., Ltd.
 
 ## 开源许可
 
-本项目采用 [Apache License 2.0](LICENSE)。
+本项目采用 [Apache License 2.0](LICENSE)。上游来源与版权归属说明见 [NOTICE](NOTICE)。

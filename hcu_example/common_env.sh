@@ -17,7 +17,7 @@ if [[ -f /opt/dtk/env.sh ]]; then
 fi
 
 export PATH="/opt/hyhal/bin:/opt/dtk/hip/bin:/opt/dtk/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
-export PYTHONPATH="${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}/slime${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONBUFFERED="${PYTHONBUFFERED:-16}"
 
 # HCU/SGLang/Megatron runtime defaults. These are also present in env.yaml for
