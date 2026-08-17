@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static-check:
+    name: Static checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Verify required open-source files
+        run: |
+          test -f README.md
+          test -f LICENSE
+          test -f NOTICE
+          test -f requirements.txt
+          test -f hcu_example/user_guide.md
+
+      - name: Check Python syntax
+        run: |
+          python -m compileall -q slime slime_plugins
+
+      - name: Check HCU shell scripts
+        run: |
+          find hcu_example -name "*.sh" -print0 | xargs -0 -r bash -n
+
+      - name: Check documentation references
+        run: |
+          grep -q 'hcu_example/user_guide.md' README.md
+          grep -q 'https://github.com/HYGON-AI/slime-das.git' hcu_example/user_guide.md
+
+      - name: Check forbidden public markers
+        run: |
+          if grep -RInE '#[[:space:]]*nhb|#nhb|42\.228\.13\.241|jenkins/model_test_env' README.md hcu_example; then
+            echo "Found a forbidden marker or internal image address."
+            exit 1
+          fi

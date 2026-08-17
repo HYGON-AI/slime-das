@@ -306,7 +306,7 @@ echo "Submit mode: ${SUBMIT_MODE}"
 echo "Torch profiler: ${ENABLE_TORCH_PROFILE}"
 
 TRAIN_CMD=(
- python3 "${SLIME_ROOT}/slime/train_async.py"
+ python3 "${SLIME_ROOT}/train_async.py"
   --actor-num-nodes "${ACTOR_NUM_NODES}"
   --actor-num-gpus-per-node "${ACTOR_NUM_GPUS_PER_NODE}"
   --rollout-num-gpus "${ROLLOUT_NUM_GPUS}"

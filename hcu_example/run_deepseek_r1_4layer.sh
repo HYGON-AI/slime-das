@@ -20,7 +20,7 @@ DATA_ROOT="${DATA_ROOT:-/home/Download}"
 SAVE_ROOT="${SAVE_ROOT:-/home/Download/deepseek/DeepSeek-R1-4layers_slime}"
 LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}/logs}"
 
-MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/slime/scripts/models/deepseek-v3.sh}"
+MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/scripts/models/deepseek-v3.sh}"
 NUM_LAYERS="${NUM_LAYERS:-4}"
 LOAD_MODE="${LOAD_MODE:-bridge}"
 
@@ -87,7 +87,7 @@ Options:
 Common env knobs:
   LOAD_MODE=bridge|torch_dist             default: bridge
   NUM_LAYERS=4                            default: 4
-  MODEL_ARGS_SCRIPT=/path/deepseek-v3.sh  default: ${SLIME_ROOT}/slime/scripts/models/deepseek-v3.sh
+  MODEL_ARGS_SCRIPT=/path/deepseek-v3.sh  default: ${SLIME_ROOT}/scripts/models/deepseek-v3.sh
   SUBMIT_MODE=direct|job                  default: direct
   ACTOR_NUM_GPUS_PER_NODE=4
   TENSOR_MODEL_PARALLEL_SIZE=4
@@ -299,7 +299,7 @@ echo "Submit mode: ${SUBMIT_MODE}"
 echo "Torch profiler: ${ENABLE_TORCH_PROFILE}"
 
 TRAIN_CMD=(
-  python3 "${SLIME_ROOT}/slime/train.py"
+  python3 "${SLIME_ROOT}/train.py"
   --actor-num-nodes "${ACTOR_NUM_NODES}"
   --actor-num-gpus-per-node "${ACTOR_NUM_GPUS_PER_NODE}"
   --rollout-num-gpus "${ROLLOUT_NUM_GPUS}"
