@@ -90,7 +90,7 @@ curl --fail --silent "http://127.0.0.1:${RAY_DASHBOARD_PORT}/api/version" >/dev/
   exit 1
 }
 
-# shellcheck disable=SC1091
+# shellcheck source=/dev/null
 source "${MODEL_ARGS_SCRIPT}"
 
 CKPT_ARGS=(

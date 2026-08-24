@@ -95,15 +95,25 @@ bash run_qwen3_4b.sh
 
 ## 上游项目与版权
 
-本项目基于 [THUDM/slime](https://github.com/THUDM/slime) 进行 HCU 平台适配开发。
+slime-das 基于 [THUDM/slime](https://github.com/THUDM/slime) 进行 HCU 平台适配开发。
 
-上游项目采用 Apache License 2.0。本仓库保留上游版权声明、[LICENSE](LICENSE) 和 [NOTICE](NOTICE) 文件。
+- 上游仓库：https://github.com/THUDM/slime
+- 上游分支：`main`
+- 上游版本：`v0.3.0`
+- 上游 Commit：`bf14dc21f9500746447f2572d0692e981c4d2a7e`
+- 上游许可证：`Apache-2.0`
 
-HCU 平台适配、示例脚本和文档的修改版权归属：
+Modified by Hygon Information Technology Co., Ltd., 2026.
+
+本仓库保留上游版权和许可证声明，详见 [LICENSE](LICENSE) 与 [NOTICE](NOTICE)。
+
+HCU 平台适配、示例脚本、用户指南和 HCU 测试相关修改的版权归属：
 
 ```text
 Copyright (c) 2026 Hygon Information Technology Co., Ltd.
 ```
+
+第三方组件、固定版本、来源和许可证信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 开源许可
 

@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
+# Modified by Hygon Information Technology Co., Ltd., 2026.
+
 NLAYERS=${MODEL_ARGS_NUM_LAYERS:-48}
 FIRST_K_DENSE_REPLACE=${MODEL_ARGS_FIRST_K_DENSE_REPLACE:-0}
 

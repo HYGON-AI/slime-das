@@ -194,5 +194,4 @@ _examples_synced/
 .env
 .DS_Store
 
-.agents/
 .codex-doc-review/
