@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: HCU 用户指南
+    url: https://github.com/HYGON-AI/slime-das/blob/main/hcu_example/user_guide.md
+    about: 请先查看 HCU 环境准备、单机与多节点运行说明。
+  - name: README
+    url: https://github.com/HYGON-AI/slime-das#readme
+    about: 查看项目概览、依赖安装和支持模型。
