@@ -1,0 +1,47 @@
+name: Build and Smoke Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    name: Build package and run basic smoke checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Upgrade packaging tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade build setuptools wheel
+
+      - name: Resolve declared environment
+        run: |
+          python -m pip install --dry-run -r requirements.txt
+
+      - name: Build wheel
+        run: |
+          python -m build --wheel --no-isolation
+          python -m pip install --no-deps dist/*.whl
+
+      - name: Run package import smoke test
+        run: |
+          python -c "import slime; import slime_plugins"
+          python -c "from importlib.metadata import version; assert version('slime-das') == '0.3.0'"
+
+      - name: Run example syntax smoke test
+        run: |
+          python -m compileall -q train.py train_async.py slime slime_plugins
+          find hcu_example -name "*.sh" -print0 | xargs -0 -r bash -n

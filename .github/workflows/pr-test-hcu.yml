@@ -1,0 +1,113 @@
+# Copyright (c) 2026 Hygon Information Technology Co., Ltd.
+# SPDX-License-Identifier: Apache-2.0
+
+name: PR Test (HCU)
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "slime/**"
+      - "slime_plugins/**"
+      - "hcu_example/**"
+      - "scripts/**"
+      - "tools/**"
+      - "train.py"
+      - "train_async.py"
+      - "requirements.txt"
+      - "setup.py"
+      - ".github/workflows/pr-test-hcu.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: slime-das-hcu-bw1000
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  hcu-qwen3-4b-smoke:
+    name: HCU Qwen3-4B single-node smoke
+    # Do not execute pull requests from forks on a self-hosted HCU runner.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, hcu, bw1000]
+    timeout-minutes: 60
+    env:
+      SLIME_ROOT: ${{ github.workspace }}
+      HCU_MEGATRON_ROOT: ${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}
+      MEGATRON_BRIDGE_ROOT: ${{ vars.SLIME_DAS_MEGATRON_BRIDGE_ROOT }}
+      MEGATRON_LM_ROOT: ${{ vars.SLIME_DAS_MEGATRON_LM_ROOT }}
+      SGLANG_ROOT: ${{ vars.SLIME_DAS_SGLANG_ROOT }}
+      MODEL_PATH: ${{ vars.SLIME_DAS_HCU_QWEN3_4B_MODEL }}
+      DATA_ROOT: ${{ vars.SLIME_DAS_HCU_DATA_ROOT }}
+      SAVE_ROOT: ${{ runner.temp }}/slime-das-hcu-ci/checkpoints
+      LOG_DIR: ${{ runner.temp }}/slime-das-hcu-ci/logs
+      NODE_IP: "127.0.0.1"
+      NUM_GPUS: "8"
+      HIP_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
+      NUM_ROLLOUT: "1"
+      ROLLOUT_BATCH_SIZE: "1"
+      N_SAMPLES_PER_PROMPT: "1"
+      N_SAMPLES_PER_EVAL_PROMPT: "1"
+      GLOBAL_BATCH_SIZE: "1"
+      ROLLOUT_MAX_RESPONSE_LEN: "256"
+      EVAL_MAX_RESPONSE_LEN: "256"
+      WANDB_MODE: disabled
+      TOKENIZERS_PARALLELISM: "false"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Validate runner configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for value in \
+            HCU_MEGATRON_ROOT MEGATRON_BRIDGE_ROOT MEGATRON_LM_ROOT SGLANG_ROOT \
+            MODEL_PATH DATA_ROOT; do
+            [[ -n "${!value}" ]] || { echo "Missing repository variable: ${value}" >&2; exit 1; }
+          done
+          test -f "${MODEL_PATH}/config.json"
+          test -f "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl"
+          test -f "${DATA_ROOT}/aime-2024/aime-2024.jsonl"
+          mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
+
+      - name: Verify HCU runtime imports
+        shell: bash
+        run: |
+          set -euo pipefail
+          source hcu_example/common_env.sh
+          python3 -c "import ray, torch; import hcu_megatron; print(ray.__version__); print(torch.cuda.get_device_name(0))"
+
+      - name: Start isolated Ray head
+        shell: bash
+        run: bash hcu_example/start_ray.sh "${NODE_IP}"
+
+      - name: Run Qwen3-4B minimum rollout and training step
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash hcu_example/run_qwen3_4b.sh \
+            --node-ip "${NODE_IP}" \
+            --model-path "${MODEL_PATH}" \
+            --data-root "${DATA_ROOT}" \
+            --save-root "${SAVE_ROOT}"
+
+      - name: Stop Ray
+        if: always()
+        shell: bash
+        run: bash hcu_example/stop_ray.sh
+
+      - name: Upload HCU smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slime-das-hcu-qwen3-4b-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/slime-das-hcu-ci/
+          if-no-files-found: warn
+          retention-days: 14
