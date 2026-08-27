@@ -94,11 +94,34 @@ export DATA_ROOT=<path-to-data-root>
 export SAVE_ROOT=<path-to-checkpoint-output>
 ```
 
-Qwen 示例要求 `DATA_ROOT` 下具备以下数据文件：
-
 ```text
 <data-root>/dapo-math-17k/dapo-math-17k.jsonl
 <data-root>/aime-2024/aime-2024.jsonl
+```
+
+## 4. 准备训练数据
+
+Qwen3-4B 示例使用 DAPO-Math-17k 作为训练集、AIME 2024 作为评估集。脚本读取
+JSONL 文件，且每条记录需要包含 `prompt` 和 `label` 字段。
+
+- DAPO-Math-17k 官方来源：[BytedTsinghua-SIA/DAPO-Math-17k](https://huggingface.co/datasets/BytedTsinghua-SIA/DAPO-Math-17k)。官方发布文件为 Parquet 格式。
+- 与本仓库示例目录结构兼容的 JSONL 下载源：[zhuzilin/dapo-math-17k](https://huggingface.co/datasets/zhuzilin/dapo-math-17k)。
+- AIME 2024 JSONL 下载源：[zhuzilin/aime-2024](https://huggingface.co/datasets/zhuzilin/aime-2024)。
+
+安装 Hugging Face 命令行工具后，可按以下方式下载。请在下载前自行审阅数据集卡片、许可证和适用条款；数据文件不应提交到本仓库。
+
+```bash
+python3 -m pip install -U huggingface_hub
+
+# 示例：下载 GLM-Z1-9B 模型权重。其他模型请替换为对应的 Hugging Face 模型 ID。
+hf download zai-org/GLM-Z1-9B-0414 \
+  --local-dir /root/GLM-Z1-9B-0414
+
+export DATA_ROOT=<path-to-data-root>
+hf download --repo-type dataset zhuzilin/dapo-math-17k \
+  --local-dir "${DATA_ROOT}/dapo-math-17k"
+hf download --repo-type dataset zhuzilin/aime-2024 \
+  --local-dir "${DATA_ROOT}/aime-2024"
 ```
 
 可按需配置资源参数：

@@ -5,7 +5,17 @@ from slime.utils.arguments import parse_args
 from slime.utils.logging_utils import configure_logger, finish_tracking, init_tracking, update_tracking_open_metrics
 from slime.utils.misc import should_run_periodic_action
 
+import logging
+logger = logging.getLogger(__name__)
 
+try:
+    from hcu_megatron import megatron_adaptor
+except ModuleNotFoundError as error:
+    if error.name != "hcu_megatron":
+        raise
+    megatron_adaptor = None
+    logger.info("hcu_megatron is not installed. GLM5 cannot run.")
+    
 def train(args):
     configure_logger()
     # allocate the GPUs
