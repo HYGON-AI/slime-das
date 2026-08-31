@@ -17,7 +17,20 @@ if [[ -f /opt/dtk/env.sh ]]; then
 fi
 
 export PATH="/opt/hyhal/bin:/opt/dtk/hip/bin:/opt/dtk/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
-export PYTHONPATH="${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+HCU_MEGATRON_PYTHONPATH=""
+if [[ -n "${HCU_MEGATRON_ROOT:-}" ]]; then
+  HCU_MEGATRON_PYTHONPATH="${HCU_MEGATRON_ROOT}:"
+fi
+export PYTHONPATH="${HCU_MEGATRON_PYTHONPATH}${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+
+# Some HCU Megatron releases import the optional Apex weight-gradient module
+# even when callers disable gradient-accumulation fusion.  Make the import-only
+# guard visible before Ray starts so every worker receives the same environment.
+# A real installed HCU extension always takes precedence.
+if ! python3 -c 'import fused_weight_gradient_mlp_cuda' >/dev/null 2>&1; then
+  export PYTHONPATH="${SCRIPT_DIR}/compat:${PYTHONPATH}"
+  echo "HCU: fused weight-gradient extension is absent; disabled-fusion import protection is enabled."
+fi
 export PYTHONBUFFERED="${PYTHONBUFFERED:-16}"
 
 # HCU/SGLang/Megatron runtime defaults. These are also present in env.yaml for
@@ -84,4 +97,3 @@ mkdir -p \
   "${TRITON_CACHE_DIR}" \
   "${TORCH_EXTENSIONS_DIR}" \
   "${RAY_TMPDIR}"
-

@@ -86,7 +86,9 @@ def get_slime_extra_args_provider(add_custom_arguments=None):
                 action=argparse.BooleanOptionalAction,
                 help=(
                     "Whether to offload the training actor to CPU during training. "
-                    "This will always be true when --colocate is set."
+                    "This defaults to true for PPO and when --colocate is set. "
+                    "Use --no-offload-train to explicitly keep actor and critic on devices "
+                    "when they have sufficient memory."
                 ),
             )
             parser.add_argument(
@@ -1825,13 +1827,17 @@ def slime_validate_args(args):
             )
             args.rollout_num_gpus = args.actor_num_gpus_per_node * args.actor_num_nodes
 
+    # PPO normally needs actor/critic offload because both models share the
+    # training devices.  Preserve that default, but allow an explicit
+    # --no-offload-train on accelerators with enough memory.  In particular,
+    # this avoids loading a CUDA-only memory-offload runtime on HCU systems.
+    if args.use_critic and args.offload_train is None:
+        args.offload_train = True
+
     if args.offload_train is None:
         args.offload_train = False
     if args.offload_rollout is None:
         args.offload_rollout = False
-
-    if args.use_critic:
-        args.offload_train = True
 
     if args.offload_train:
         args.disable_grad_buffers_cpu_backup = True

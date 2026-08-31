@@ -94,6 +94,10 @@ class RayTrainGroup:
         # Create worker actors
         self._actor_handlers = []
         master_addr, master_port = None, None
+        # start_ray.sh reserves 20000-20999 for Ray workers.  Keep training
+        # rendezvous ports outside that interval and give colocated actor and
+        # critic groups separate ranges so they cannot select the same port.
+        master_port_start = 21000 if self.role == "actor" else 22000
         for rank in range(world_size):
             actor = TrainRayActor.options(
                 num_cpus=num_gpus_per_actor,
@@ -102,7 +106,7 @@ class RayTrainGroup:
                     placement_group=pg,
                     placement_group_bundle_index=reordered_bundle_indices[rank],
                 ),
-            ).remote(world_size, rank, master_addr, master_port)
+            ).remote(world_size, rank, master_addr, master_port, master_port_start)
             if rank == 0:
                 master_addr, master_port = ray.get(actor.get_master_addr_and_port.remote())
             self._actor_handlers.append(actor)

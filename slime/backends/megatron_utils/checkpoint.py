@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
 # TODO: may need to copy those 2 functions and do refactoring.
@@ -104,13 +105,19 @@ def load_checkpoint(ddp_model, optimizer, opt_param_scheduler, checkpointing_con
     ), f"{args.load=} does not exist or is an empty directory. Did you specify the wrong folder?"
 
     if _is_megatron_checkpoint(load_path):
-        return _load_checkpoint_megatron(
-            ddp_model=ddp_model,
-            optimizer=optimizer,
-            opt_param_scheduler=opt_param_scheduler,
-            checkpointing_context=checkpointing_context,
-            skip_load_to_model_and_opt=skip_load_to_model_and_opt,
-        )
+        # A full Megatron training checkpoint contains optimizer, scheduler,
+        # RNG, and process-control state in addition to tensors. PyTorch 2.6
+        # defaults torch.load() to weights-only mode, which cannot restore that
+        # state. Megatron checkpoints are executable pickle data and therefore
+        # must only be loaded from a trusted path supplied by the operator.
+        with _trusted_full_checkpoint_load():
+            return _load_checkpoint_megatron(
+                ddp_model=ddp_model,
+                optimizer=optimizer,
+                opt_param_scheduler=opt_param_scheduler,
+                checkpointing_context=checkpointing_context,
+                skip_load_to_model_and_opt=skip_load_to_model_and_opt,
+            )
     else:
         return _load_checkpoint_hf(
             ddp_model=ddp_model,
@@ -124,6 +131,20 @@ def _is_megatron_checkpoint(path: str | Path) -> bool:
     return (Path(path) / "latest_checkpointed_iteration.txt").is_file() or bool(
         re.fullmatch(r"iter_\d{7}", Path(path).name)
     )
+
+
+@contextmanager
+def _trusted_full_checkpoint_load():
+    variable = "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"
+    previous = os.environ.get(variable)
+    os.environ[variable] = "1"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(variable, None)
+        else:
+            os.environ[variable] = previous
 
 
 def _load_checkpoint_hf(ddp_model, optimizer, args, load_path: str):

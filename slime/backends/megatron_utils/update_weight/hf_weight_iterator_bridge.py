@@ -59,7 +59,29 @@ class HfWeightIteratorBridge(HfWeightIteratorBase):
             named_weights = self._bridge.export_hf_weights(self.model, cpu=False, conversion_tasks=conversion_tasks)
 
             def _streaming_quantized():
-                for hf_param_name, weight, megatron_param_name in named_weights:
+                for named_weight in named_weights:
+                    if len(named_weight) == 3:
+                        hf_param_name, weight, megatron_param_name = named_weight
+                    elif len(named_weight) == 2:
+                        hf_param_name, weight = named_weight
+                        if self.quantization_config is not None:
+                            raise RuntimeError(
+                                "This Megatron Bridge version does not return the source Megatron parameter name, "
+                                "which is required for quantized weight updates. Please use a Bridge version that "
+                                "returns (hf_param_name, weight, megatron_param_name)."
+                            )
+                        # Megatron Bridge 0.18.x returns HFWeightTuple(name, weight). The
+                        # source name is only needed below to remove vocabulary padding.
+                        megatron_param_name = {
+                            "model.embed_tokens.weight": "embedding.word_embeddings.weight",
+                            "lm_head.weight": "output_layer.weight",
+                        }.get(hf_param_name, hf_param_name)
+                    else:
+                        raise RuntimeError(
+                            f"Unexpected Megatron Bridge weight tuple with {len(named_weight)} fields: "
+                            f"{type(named_weight).__name__}"
+                        )
+
                     processed_weight = postprocess_hf_param(
                         args=self.args,
                         megatron_param_name=megatron_param_name,
