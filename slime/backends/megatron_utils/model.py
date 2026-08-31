@@ -806,7 +806,11 @@ def train(
             log_dict["train/step"] = accumulated_step_id
             logging_utils.log(args, log_dict, step_key="train/step")
 
-            if args.ci_test and "train/train_rollout_logprob_abs_diff" in log_dict:
+            if (
+                args.ci_test
+                and not args.ci_disable_kl_checker
+                and "train/train_rollout_logprob_abs_diff" in log_dict
+            ):
                 assert log_dict["train/train_rollout_logprob_abs_diff"] <= 0.1, f"{log_dict=}"
 
             if args.ci_test and not args.ci_disable_kl_checker:

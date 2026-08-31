@@ -13,7 +13,6 @@ import ray
 import torch
 import torch.distributed as dist
 from megatron.core import mpu
-from torch_memory_saver import torch_memory_saver
 from transformers import AutoConfig, AutoTokenizer
 
 from slime.ray.train_actor import TrainRayActor
@@ -42,6 +41,13 @@ from .update_weight.update_weight_from_tensor import UpdateWeightFromTensor
 logging.getLogger("megatron").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
+
+
+def _get_torch_memory_saver():
+    """Import the optional CUDA memory-offload runtime only when requested."""
+    from torch_memory_saver import torch_memory_saver
+
+    return torch_memory_saver
 
 
 class MegatronTrainRayActor(TrainRayActor):
@@ -77,6 +83,7 @@ class MegatronTrainRayActor(TrainRayActor):
         dist.barrier(group=get_gloo_group())
 
         if args.offload_train:
+            torch_memory_saver = _get_torch_memory_saver()
             if (x := args.train_memory_margin_bytes) > 0:
                 logger.info(f"Set torch_memory_saver.memory_margin_bytes to {x}")
                 torch_memory_saver.memory_margin_bytes = x
@@ -179,6 +186,7 @@ class MegatronTrainRayActor(TrainRayActor):
     @timer
     def sleep(self) -> None:
         assert self.args.offload_train
+        torch_memory_saver = _get_torch_memory_saver()
 
         clear_memory(clear_host_memory=True)
         print_memory("before offload model")
@@ -198,6 +206,7 @@ class MegatronTrainRayActor(TrainRayActor):
     @timer
     def wake_up(self) -> None:
         assert self.args.offload_train
+        torch_memory_saver = _get_torch_memory_saver()
         print_memory("before wake_up model")
 
         torch_memory_saver.resume()
@@ -626,7 +635,10 @@ class MegatronTrainRayActor(TrainRayActor):
             if dist.get_rank() == 0:
                 ray.get(self.rollout_manager.clear_updatable_num_new_engines.remote())
 
-        with torch_memory_saver.disable() if self.args.offload_train else nullcontext():
+        memory_saver_context = (
+            _get_torch_memory_saver().disable() if self.args.offload_train else nullcontext()
+        )
+        with memory_saver_context:
             print_memory("before update_weights")
             self.weight_updater.update_weights()
             print_memory("after update_weights")
