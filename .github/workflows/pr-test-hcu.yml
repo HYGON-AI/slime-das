@@ -46,8 +46,8 @@ jobs:
       SGLANG_ROOT: ${{ vars.SLIME_DAS_SGLANG_ROOT }}
       MODEL_PATH: ${{ vars.SLIME_DAS_HCU_QWEN3_4B_MODEL }}
       DATA_ROOT: ${{ vars.SLIME_DAS_HCU_DATA_ROOT }}
-      SAVE_ROOT: ${{ runner.temp }}/slime-das-hcu-ci/checkpoints
-      LOG_DIR: ${{ runner.temp }}/slime-das-hcu-ci/logs
+      SAVE_ROOT: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/checkpoints
+      LOG_DIR: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/logs
       NODE_IP: "127.0.0.1"
       NUM_GPUS: "8"
       HIP_VISIBLE_DEVICES: "0,1,2,3,4,5,6,7"
@@ -110,6 +110,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: slime-das-hcu-qwen3-4b-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/slime-das-hcu-ci/
+          path: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: warn
           retention-days: 14
