@@ -62,12 +62,10 @@ python -m pip install -r requirements.txt
 
 `requirements.txt` 包含项目直接 Python 依赖，其中包括 `torch_memory_saver`。
 
-设置外部源码路径。执行 `common_env.sh` 时，`SLIME_ROOT` 默认自动定位为当前仓库根目录：
+设置 HCU Megatron 源码根目录。执行 `common_env.sh` 时，`SLIME_ROOT` 默认自动定位为当前仓库根目录，Megatron-Bridge 和 Megatron-LM 路径从该根目录自动推导；verl 镜像直接使用已安装的 SGLang：
 
 ```bash
-export MEGATRON_BRIDGE_ROOT=<path-to-megatron-bridge>
-export MEGATRON_LM_ROOT=<path-to-megatron-lm>
-export SGLANG_ROOT=<path-to-sglang>
+export HCU_MEGATRON_ROOT=<path-to-hcu-megatron>
 ```
 
 ## 2. 支持模型和示例
@@ -93,6 +91,9 @@ export MODEL_PATH=<path-to-huggingface-model>
 export DATA_ROOT=<path-to-data-root>
 export SAVE_ROOT=<path-to-checkpoint-output>
 ```
+
+Qwen3-4B 示例的默认模型路径是
+`/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507`；只有使用其他模型目录时才需要设置 `MODEL_PATH`。
 
 ```text
 <data-root>/dapo-math-17k/dapo-math-17k.jsonl
@@ -173,9 +174,7 @@ bash run_qwen3_4b_fully_async.sh
 ```bash
 cd <path-to-slime-das>/hcu_example
 
-export MEGATRON_BRIDGE_ROOT=<path-to-megatron-bridge>
-export MEGATRON_LM_ROOT=<path-to-megatron-lm>
-export SGLANG_ROOT=<path-to-sglang>
+export HCU_MEGATRON_ROOT=<path-to-hcu-megatron>
 source common_env.sh
 
 NUM_GPUS=<gpus-per-node> bash start_ray.sh <head-node-ip>
@@ -188,9 +187,7 @@ NUM_GPUS=<gpus-per-node> bash start_ray.sh <head-node-ip>
 ```bash
 cd <path-to-slime-das>/hcu_example
 
-export MEGATRON_BRIDGE_ROOT=<path-to-megatron-bridge>
-export MEGATRON_LM_ROOT=<path-to-megatron-lm>
-export SGLANG_ROOT=<path-to-sglang>
+export HCU_MEGATRON_ROOT=<path-to-hcu-megatron>
 source common_env.sh
 
 NUM_GPUS=<gpus-per-node> \
@@ -272,7 +269,7 @@ bash run_qwen3_4b.sh --resume
 
 | 问题 | 建议处理方式 |
 | --- | --- |
-| 缺少外部组件路径 | 在执行 `source common_env.sh` 前设置 `MEGATRON_BRIDGE_ROOT`、`MEGATRON_LM_ROOT`、`SGLANG_ROOT`。 |
+| 缺少外部组件路径 | 在执行 `source common_env.sh` 前设置 `HCU_MEGATRON_ROOT`；该目录下必须包含 `3rdparty/Megatron-Bridge` 和 `3rdparty/Megatron-LM`。 |
 | Ray 无法连接 | 先启动 head 节点，确认地址和端口 `63792`，并检查节点间网络连通性。 |
 | Ray 未发现 HCU 资源 | 确认 HCU 运行时可见，并在启动 Ray 前正确设置 `NUM_GPUS`。 |
 | 模型或数据路径不存在 | 显式设置 `MODEL_PATH`、`DATA_ROOT`、`TORCH_DIST_PATH`（如需要）和 `SAVE_ROOT`。 |

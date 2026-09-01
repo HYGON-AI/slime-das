@@ -25,7 +25,7 @@ CHECKPOINT_MODE="${CHECKPOINT_MODE:-}"
 CHECKPOINT_OPTIMIZER="${CHECKPOINT_OPTIMIZER:-cpu}"
 CHECKPOINT_ASYNC_SAVE="${CHECKPOINT_ASYNC_SAVE:-0}"
 NODE_IP="${NODE_IP:-127.0.0.1}"
-MODEL_PATH="${MODEL_PATH:-/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B}"
+MODEL_PATH="${MODEL_PATH:-/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507}"
 MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/scripts/models/qwen3-4B.sh}"
 DATA_ROOT="${DATA_ROOT:-/home/Download}"
 SUBMIT_MODE="${SUBMIT_MODE:-direct}"
@@ -165,6 +165,9 @@ curl --fail --silent "http://127.0.0.1:${RAY_DASHBOARD_PORT}/api/version" >/dev/
   exit 1
 }
 
+if [[ "${MODEL_PATH##*/}" == "Qwen3-4B-Thinking-2507" ]]; then
+  export MODEL_ARGS_ROTARY_BASE="${MODEL_ARGS_ROTARY_BASE:-5000000}"
+fi
 # shellcheck source=/dev/null
 source "${MODEL_ARGS_SCRIPT}"
 mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
