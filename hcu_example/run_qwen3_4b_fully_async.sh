@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common_env.sh"
 
 NODE_IP="${NODE_IP:-127.0.0.1}"
-MODEL_PATH="${MODEL_PATH:-/model/qwen3/Qwen3-4B}"
+MODEL_PATH="${MODEL_PATH:-/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507}"
 MODEL_ARGS_SCRIPT="${MODEL_ARGS_SCRIPT:-${SLIME_ROOT}/scripts/models/qwen3-4B.sh}"
 DATA_ROOT="${DATA_ROOT:-/home/Download}"
 SAVE_ROOT="${SAVE_ROOT:-/home/Download/qwen3/Qwen3-4B_fully_async_test}"
@@ -116,6 +116,9 @@ curl --fail --silent "http://127.0.0.1:${RAY_DASHBOARD_PORT}/api/version" >/dev/
   exit 1
 }
 
+if [[ "${MODEL_PATH##*/}" == "Qwen3-4B-Thinking-2507" ]]; then
+  export MODEL_ARGS_ROTARY_BASE="${MODEL_ARGS_ROTARY_BASE:-5000000}"
+fi
 # shellcheck disable=SC1090
 source "${MODEL_ARGS_SCRIPT}"
 

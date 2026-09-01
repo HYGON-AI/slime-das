@@ -37,15 +37,30 @@ jobs:
     runs-on:
       group: ci-general
       labels: [self-hosted, ci, bw1000]
+    container:
+      image: harbor.sourcefind.cn:5443/dcu/admin/base/custom:verl-das-ubuntu22.04-dtk26.04-py3.10-20260617-2235
+      volumes:
+        - /opt/hyhal:/opt/hyhal:ro
+        - /public:/public:ro
+        - "${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:ro"
+        - "${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:ro"
+      options: >-
+        --ipc=host
+        --shm-size=128g
+        --device=/dev/kfd
+        --device=/dev/mkfd
+        --device=/dev/dri
+        --group-add=video
+        --cap-add=SYS_PTRACE
+        --security-opt=seccomp=unconfined
+        --ulimit=memlock=-1:-1
+        --privileged
     timeout-minutes: 60
     env:
       SLIME_ROOT: ${{ github.workspace }}
       HCU_MEGATRON_ROOT: ${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}
-      MEGATRON_BRIDGE_ROOT: ${{ vars.SLIME_DAS_MEGATRON_BRIDGE_ROOT }}
-      MEGATRON_LM_ROOT: ${{ vars.SLIME_DAS_MEGATRON_LM_ROOT }}
-      SGLANG_ROOT: ${{ vars.SLIME_DAS_SGLANG_ROOT }}
-      MODEL_PATH: ${{ vars.SLIME_DAS_HCU_QWEN3_4B_MODEL }}
       DATA_ROOT: ${{ vars.SLIME_DAS_HCU_DATA_ROOT }}
+      MODEL_PATH: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507
       SAVE_ROOT: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/checkpoints
       LOG_DIR: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/logs
       NODE_IP: "127.0.0.1"
@@ -65,18 +80,29 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Prepare verl runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir \
+            sglang-router==0.3.2 \
+            wandb==0.29.0 \
+            nvidia-modelopt==0.46.0
+          python3 -m pip install --no-cache-dir --force-reinstall numpy==1.26.4
+
       - name: Validate runner configuration
         shell: bash
         run: |
           set -euo pipefail
-          for value in \
-            HCU_MEGATRON_ROOT MEGATRON_BRIDGE_ROOT MEGATRON_LM_ROOT SGLANG_ROOT \
-            MODEL_PATH DATA_ROOT; do
+          for value in HCU_MEGATRON_ROOT DATA_ROOT; do
             [[ -n "${!value}" ]] || { echo "Missing repository variable: ${value}" >&2; exit 1; }
           done
+          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-Bridge"
+          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-LM"
           test -f "${MODEL_PATH}/config.json"
           test -f "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl"
           test -f "${DATA_ROOT}/aime-2024/aime-2024.jsonl"
+          python3 -c "import sglang; print(sglang.__version__)"
           mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
 
       - name: Verify HCU runtime imports

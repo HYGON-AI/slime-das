@@ -6,15 +6,15 @@ the GitHub-hosted static and build smoke workflows.
 
 ## Required runner labels
 
-The runner must have all of these labels:
+The jobs target the `ci-general` runner group with these labels:
 
 ```text
-self-hosted, Linux, X64, hcu, bw1000
+self-hosted, ci, bw1000
 ```
 
-The runner must provide the HCU runtime, Ray, Python 3, Docker-compatible
-driver environment, and eight available HCU devices. The runner service must
-start with the runtime Python and `ray` command on `PATH`.
+The runner must provide Docker, `/opt/hyhal`, `/public`, and eight available
+HCU devices. Both HCU workflows run inside the pinned verl image
+`harbor.sourcefind.cn:5443/dcu/admin/base/custom:verl-das-ubuntu22.04-dtk26.04-py3.10-20260617-2235`.
 
 ## Repository variables
 
@@ -24,12 +24,11 @@ runner; the workflow never downloads them.
 
 | Variable | Purpose |
 | --- | --- |
-| `SLIME_DAS_HCU_MEGATRON_ROOT` | HCU Megatron checkout root |
-| `SLIME_DAS_MEGATRON_BRIDGE_ROOT` | Megatron-Bridge checkout root |
-| `SLIME_DAS_MEGATRON_LM_ROOT` | Megatron-LM checkout root |
-| `SLIME_DAS_SGLANG_ROOT` | SGLang checkout root |
-| `SLIME_DAS_HCU_QWEN3_4B_MODEL` | Local Qwen3-4B model directory |
+| `SLIME_DAS_HCU_MEGATRON_ROOT` | HCU Megatron checkout root; the workflows derive `3rdparty/Megatron-Bridge` and `3rdparty/Megatron-LM` from it |
 | `SLIME_DAS_HCU_DATA_ROOT` | Parent directory of `dapo-math-17k/` and `aime-2024/` |
+
+SGLang is loaded from the verl image. The model path defaults to the read-only
+runner mount `/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507`.
 
 Do not store tokens, passwords, or writable production paths in repository
 variables. Use repository secrets only when an external credential is

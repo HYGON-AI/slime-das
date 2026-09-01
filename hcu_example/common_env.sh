@@ -7,9 +7,9 @@
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 export SLIME_ROOT="${SLIME_ROOT:-$(cd -- "${SCRIPT_DIR}/.." && pwd)}"
 
-: "${MEGATRON_BRIDGE_ROOT:?Set MEGATRON_BRIDGE_ROOT to the Megatron-Bridge checkout.}"
-: "${MEGATRON_LM_ROOT:?Set MEGATRON_LM_ROOT to the Megatron-LM checkout.}"
-: "${SGLANG_ROOT:?Set SGLANG_ROOT to the SGLang checkout.}"
+: "${HCU_MEGATRON_ROOT:?Set HCU_MEGATRON_ROOT to the HCU Megatron checkout.}"
+export MEGATRON_BRIDGE_ROOT="${MEGATRON_BRIDGE_ROOT:-${HCU_MEGATRON_ROOT}/3rdparty/Megatron-Bridge}"
+export MEGATRON_LM_ROOT="${MEGATRON_LM_ROOT:-${HCU_MEGATRON_ROOT}/3rdparty/Megatron-LM}"
 
 if [[ -f /opt/dtk/env.sh ]]; then
   # shellcheck disable=SC1091
@@ -17,11 +17,11 @@ if [[ -f /opt/dtk/env.sh ]]; then
 fi
 
 export PATH="/opt/hyhal/bin:/opt/dtk/hip/bin:/opt/dtk/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
-HCU_MEGATRON_PYTHONPATH=""
-if [[ -n "${HCU_MEGATRON_ROOT:-}" ]]; then
-  HCU_MEGATRON_PYTHONPATH="${HCU_MEGATRON_ROOT}:"
+SGLANG_PYTHONPATH=""
+if [[ -n "${SGLANG_ROOT:-}" ]]; then
+  SGLANG_PYTHONPATH="${SGLANG_ROOT}/python:"
 fi
-export PYTHONPATH="${HCU_MEGATRON_PYTHONPATH}${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_ROOT}/python:${SLIME_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${HCU_MEGATRON_ROOT}:${MEGATRON_BRIDGE_ROOT}/src:${MEGATRON_LM_ROOT}:${SGLANG_PYTHONPATH}${SLIME_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # Some HCU Megatron releases import the optional Apex weight-gradient module
 # even when callers disable gradient-accumulation fusion.  Make the import-only

@@ -38,6 +38,24 @@ jobs:
     runs-on:
       group: ci-general
       labels: [self-hosted, ci, bw1000]
+    container:
+      image: harbor.sourcefind.cn:5443/dcu/admin/base/custom:verl-das-ubuntu22.04-dtk26.04-py3.10-20260617-2235
+      volumes:
+        - /opt/hyhal:/opt/hyhal:ro
+        - /public:/public:ro
+        - "${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:ro"
+        - "${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:ro"
+      options: >-
+        --ipc=host
+        --shm-size=128g
+        --device=/dev/kfd
+        --device=/dev/mkfd
+        --device=/dev/dri
+        --group-add=video
+        --cap-add=SYS_PTRACE
+        --security-opt=seccomp=unconfined
+        --ulimit=memlock=-1:-1
+        --privileged
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -53,12 +71,8 @@ jobs:
     env:
       SLIME_ROOT: ${{ github.workspace }}
       HCU_MEGATRON_ROOT: ${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}
-      MEGATRON_BRIDGE_ROOT: ${{ vars.SLIME_DAS_MEGATRON_BRIDGE_ROOT }}
-      MEGATRON_LM_ROOT: ${{ vars.SLIME_DAS_MEGATRON_LM_ROOT }}
-      SGLANG_ROOT: ${{ vars.SLIME_DAS_SGLANG_ROOT }}
-      MODEL_PATH: ${{ vars.SLIME_DAS_HCU_QWEN3_4B_MODEL }}
-      PUBLIC_MODEL_PATH: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B
       DATA_ROOT: ${{ vars.SLIME_DAS_HCU_DATA_ROOT }}
+      MODEL_PATH: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507
       SAVE_ROOT: ${{ github.workspace }}/.hcu-core/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.scenario }}/checkpoints
       LOG_DIR: ${{ github.workspace }}/.hcu-core/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.scenario }}/logs
       NODE_IP: "127.0.0.1"
@@ -75,24 +89,33 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Prepare verl runtime dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir \
+            sglang-router==0.3.2 \
+            wandb==0.29.0 \
+            nvidia-modelopt==0.46.0
+          python3 -m pip install --no-cache-dir --force-reinstall numpy==1.26.4
+
       - name: Validate HCU runner and local assets
         shell: bash
         run: |
           set -euo pipefail
-          for value in \
-            HCU_MEGATRON_ROOT MEGATRON_BRIDGE_ROOT MEGATRON_LM_ROOT SGLANG_ROOT \
-            DATA_ROOT; do
+          for value in HCU_MEGATRON_ROOT DATA_ROOT; do
             [[ -n "${!value}" ]] || { echo "Missing repository variable: ${value}" >&2; exit 1; }
           done
 
-          model_path="${MODEL_PATH:-${PUBLIC_MODEL_PATH}}"
-          test -f "${model_path}/config.json"
-          test -f "${model_path}/model.safetensors.index.json"
+          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-Bridge"
+          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-LM"
+          test -f "${MODEL_PATH}/config.json"
+          test -f "${MODEL_PATH}/model.safetensors.index.json"
           test -f "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl"
+          python3 -c "import sglang; print(sglang.__version__)"
           mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
-          echo "MODEL_PATH=${model_path}" >> "${GITHUB_ENV}"
           echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
-          echo "Using local Qwen3-4B model: ${model_path}"
+          echo "Using local Qwen3-4B model: ${MODEL_PATH}"
 
       - name: Verify eight-device HCU runtime
         shell: bash
