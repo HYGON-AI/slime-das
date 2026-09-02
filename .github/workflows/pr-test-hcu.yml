@@ -37,29 +37,15 @@ jobs:
     runs-on:
       group: ci-general
       labels: [self-hosted, ci, bw1000]
-    container:
-      image: harbor.sourcefind.cn:5443/dcu/admin/base/custom:verl-das-ubuntu22.04-dtk26.04-py3.10-20260617-2235
-      volumes:
-        - /opt/hyhal:/opt/hyhal:ro
-        - /public:/public:ro
-        - "${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:ro"
-        - "${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:ro"
-      options: >-
-        --ipc=host
-        --shm-size=128g
-        --device=/dev/kfd
-        --device=/dev/mkfd
-        --device=/dev/dri
-        --group-add=video
-        --cap-add=SYS_PTRACE
-        --security-opt=seccomp=unconfined
-        --ulimit=memlock=-1:-1
-        --privileged
     timeout-minutes: 60
     env:
+      HCU_IMAGE: slime-das:hcu-v0.3.0-20260902
+      HCU_IMAGE_ID: sha256:522679376cfe815290508512ec3b02ab6d01fa21426bafc18b35c62a293eea3c
+      HCU_IMAGE_TAR: /public/home/niuhb/slime-das-hcu-v0.3.0-20260902.tar.gz
+      HCU_CONTAINER_NAME: slime-das-hcu-${{ github.run_id }}-${{ github.run_attempt }}-smoke
       SLIME_ROOT: ${{ github.workspace }}
-      HCU_MEGATRON_ROOT: ${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}
-      DATA_ROOT: ${{ vars.SLIME_DAS_HCU_DATA_ROOT }}
+      HCU_MEGATRON_ROOT: /opt/hcu-megatron
+      DATA_ROOT: /opt/slime-data
       MODEL_PATH: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507
       SAVE_ROOT: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/checkpoints
       LOG_DIR: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/logs
@@ -80,56 +66,69 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Prepare verl runtime dependencies
+      - name: Load bundled HCU image from shared storage
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --no-cache-dir \
-            sglang-router==0.3.2 \
-            wandb==0.29.0 \
-            nvidia-modelopt==0.46.0
-          python3 -m pip install --no-cache-dir --force-reinstall numpy==1.26.4
-
-      - name: Validate runner configuration
-        shell: bash
-        run: |
-          set -euo pipefail
-          for value in HCU_MEGATRON_ROOT DATA_ROOT; do
-            [[ -n "${!value}" ]] || { echo "Missing repository variable: ${value}" >&2; exit 1; }
-          done
-          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-Bridge"
-          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-LM"
-          test -f "${MODEL_PATH}/config.json"
-          test -f "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl"
-          test -f "${DATA_ROOT}/aime-2024/aime-2024.jsonl"
-          python3 -c "import sglang; print(sglang.__version__)"
-          mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
-
-      - name: Verify HCU runtime imports
-        shell: bash
-        run: |
-          set -euo pipefail
-          source hcu_example/common_env.sh
-          python3 -c "import ray, torch; import hcu_megatron; print(ray.__version__); print(torch.cuda.get_device_name(0))"
-
-      - name: Start isolated Ray head
-        shell: bash
-        run: bash hcu_example/start_ray.sh "${NODE_IP}"
+          test -r "${HCU_IMAGE_TAR}"
+          current_id="$(docker image inspect "${HCU_IMAGE}" --format '{{.Id}}' 2>/dev/null || true)"
+          if [[ "${current_id}" != "${HCU_IMAGE_ID}" ]]; then
+            docker load --input "${HCU_IMAGE_TAR}"
+          fi
+          loaded_id="$(docker image inspect "${HCU_IMAGE}" --format '{{.Id}}')"
+          [[ "${loaded_id}" == "${HCU_IMAGE_ID}" ]]
+          echo "Using bundled HCU image: ${HCU_IMAGE} (${loaded_id})"
 
       - name: Run Qwen3-4B minimum rollout and training step
         shell: bash
         run: |
           set -euo pipefail
-          bash hcu_example/run_qwen3_4b.sh \
-            --node-ip "${NODE_IP}" \
-            --model-path "${MODEL_PATH}" \
-            --data-root "${DATA_ROOT}" \
-            --save-root "${SAVE_ROOT}"
+          mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
+          cleanup_container() {
+            docker rm --force "${HCU_CONTAINER_NAME}" >/dev/null 2>&1 || true
+          }
+          trap cleanup_container EXIT
 
-      - name: Stop Ray
-        if: always()
-        shell: bash
-        run: bash hcu_example/stop_ray.sh
+          docker run --rm --pull=never \
+            --name "${HCU_CONTAINER_NAME}" \
+            --ipc=host \
+            --shm-size=128g \
+            --device=/dev/kfd \
+            --device=/dev/mkfd \
+            --device=/dev/dri \
+            --group-add=video \
+            --cap-add=SYS_PTRACE \
+            --security-opt=seccomp=unconfined \
+            --ulimit=memlock=-1:-1 \
+            --privileged \
+            --volume /opt/hyhal:/opt/hyhal:ro \
+            --volume /public:/public:ro \
+            --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+            --workdir "${GITHUB_WORKSPACE}" \
+            --env SLIME_ROOT \
+            --env HCU_MEGATRON_ROOT \
+            --env DATA_ROOT \
+            --env MODEL_PATH \
+            --env SAVE_ROOT \
+            --env LOG_DIR \
+            --env NODE_IP \
+            --env NUM_GPUS \
+            --env HIP_VISIBLE_DEVICES \
+            --env NUM_ROLLOUT \
+            --env ROLLOUT_BATCH_SIZE \
+            --env N_SAMPLES_PER_PROMPT \
+            --env N_SAMPLES_PER_EVAL_PROMPT \
+            --env GLOBAL_BATCH_SIZE \
+            --env ROLLOUT_MAX_RESPONSE_LEN \
+            --env EVAL_MAX_RESPONSE_LEN \
+            --env WANDB_MODE \
+            --env TOKENIZERS_PARALLELISM \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --env XDG_CACHE_HOME=/tmp/slime-hcu-cache \
+            --env HOST_UID="$(id -u)" \
+            --env HOST_GID="$(id -g)" \
+            "${HCU_IMAGE}" \
+            bash hcu_example/run_hcu_ci.sh smoke
 
       - name: Upload HCU smoke logs
         if: always()
@@ -139,3 +138,19 @@ jobs:
           path: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Clean HCU smoke state
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_root="${GITHUB_WORKSPACE}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}"
+          if [[ -d "${smoke_root}" ]] && docker image inspect "${HCU_IMAGE}" >/dev/null 2>&1; then
+            docker run --rm --pull=never \
+              --volume "${smoke_root}:/ci-output" \
+              --env HOST_UID="$(id -u)" \
+              --env HOST_GID="$(id -g)" \
+              "${HCU_IMAGE}" \
+              bash -c 'rm -rf -- /ci-output/checkpoints /ci-output/cache; chown -R "${HOST_UID}:${HOST_GID}" /ci-output'
+          fi
+          rm -rf -- "${smoke_root}"
