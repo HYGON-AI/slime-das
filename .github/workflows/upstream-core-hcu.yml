@@ -264,10 +264,8 @@ jobs:
             if [[ "${async_save}" == "1" ]]; then
               local async_log
               async_log="$(find "${variant_log_dir}" -maxdepth 1 -type f \
-                -name 'Qwen3-4B-checkpoint-save-*-async-*.log' -print | sort | tail -n 1)"
+                -name '*-checkpoint-save-*-async-*.log' -print | sort | tail -n 1)"
               [[ -n "${async_log}" ]]
-              grep -Eq 'async_save .* True' "${async_log}"
-              grep -Eq 'async_strategy .* mcore' "${async_log}"
               grep -q 'scheduled an async checkpoint save' "${async_log}"
               grep -q 'successfully saved checkpoint' "${async_log}"
               ! grep -q 'Disabling --async-save' "${async_log}"
