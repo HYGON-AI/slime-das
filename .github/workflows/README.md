@@ -38,6 +38,10 @@ strictly required.
 
 ## Test scope and pass criteria
 
+`upstream-core-hcu.yml` runs automatically after matching changes are merged
+or otherwise pushed to `main`. It can also be started manually with
+`workflow_dispatch`. It does not execute untrusted fork code before merge.
+
 `pr-test-hcu.yml` runs only for same-repository pull requests that modify HCU
 runtime code, training code, dependencies, HCU examples, or the workflow
 itself. Fork pull requests are skipped to prevent untrusted code from running

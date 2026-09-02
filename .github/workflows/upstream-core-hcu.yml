@@ -4,7 +4,7 @@
 name: Upstream Core Tests (HCU)
 
 on:
-  pull_request:
+  push:
     branches:
       - main
     paths:
@@ -31,10 +31,6 @@ permissions:
 jobs:
   upstream-core:
     name: HCU upstream core (${{ matrix.scenario }})
-    # Do not execute pull requests from forks on a self-hosted HCU runner.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository
     runs-on:
       group: ci-general
       labels: [self-hosted, ci, bw1000]
