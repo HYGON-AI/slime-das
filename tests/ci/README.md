@@ -15,20 +15,22 @@ The token can be found at https://github.com/THUDM/slime/settings/actions/runner
 
 WARN: The `GITHUB_RUNNER_TOKEN` changes after a while.
 
-### Step 2: Prepare `/home/runner/externals`
+### Step 2: Prepare runner externals
 
 ```shell
-docker run --rm -it --privileged --pid=host -v /:/host_root ubuntu /bin/bash -c 'rm -rf /host_root/home/runner/externals && mkdir -p /host_root/home/runner/externals && chmod -R 777 /host_root/home/runner/externals'
-docker run -d --name temp-runner ghcr.io/actions/actions-runner:2.328.0 tail -f /dev/null
-docker cp temp-runner:/home/runner/externals/. /home/runner/externals
+cd "$(git rev-parse --show-toplevel)/tests/ci/github_runner"
+cp .env.example .env
+mkdir -p ./runner-externals ./runner-work
+docker create --name temp-runner ghcr.io/actions/actions-runner:2.329.0
+docker cp temp-runner:/home/runner/externals/. ./runner-externals/
 docker rm -f temp-runner
-ls -alh /home/runner/externals
+ls -alh ./runner-externals
 ```
 
 ### Step 3: Run
 
 ```shell
-cd /mnt/data/tom/primary_synced/slime/tests/ci/github_runner
+cd "$(git rev-parse --show-toplevel)/tests/ci/github_runner"
 docker compose up -d
 ```
 
