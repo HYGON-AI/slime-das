@@ -38,24 +38,6 @@ jobs:
     runs-on:
       group: ci-general
       labels: [self-hosted, ci, bw1000]
-    container:
-      image: harbor.sourcefind.cn:5443/dcu/admin/base/custom:verl-das-ubuntu22.04-dtk26.04-py3.10-20260617-2235
-      volumes:
-        - /opt/hyhal:/opt/hyhal:ro
-        - /public:/public:ro
-        - "${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}:ro"
-        - "${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:${{ vars.SLIME_DAS_HCU_DATA_ROOT }}:ro"
-      options: >-
-        --ipc=host
-        --shm-size=128g
-        --device=/dev/kfd
-        --device=/dev/mkfd
-        --device=/dev/dri
-        --group-add=video
-        --cap-add=SYS_PTRACE
-        --security-opt=seccomp=unconfined
-        --ulimit=memlock=-1:-1
-        --privileged
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -69,9 +51,13 @@ jobs:
           - checkpoint-extended
           - streaming-partial
     env:
+      HCU_IMAGE: slime-das:hcu-v0.3.0-20260902
+      HCU_IMAGE_ID: sha256:522679376cfe815290508512ec3b02ab6d01fa21426bafc18b35c62a293eea3c
+      HCU_IMAGE_TAR: /public/home/niuhb/slime-das-hcu-v0.3.0-20260902.tar.gz
+      HCU_CONTAINER_NAME: slime-das-hcu-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.scenario }}
       SLIME_ROOT: ${{ github.workspace }}
-      HCU_MEGATRON_ROOT: ${{ vars.SLIME_DAS_HCU_MEGATRON_ROOT }}
-      DATA_ROOT: ${{ vars.SLIME_DAS_HCU_DATA_ROOT }}
+      HCU_MEGATRON_ROOT: /opt/hcu-megatron
+      DATA_ROOT: /opt/slime-data
       MODEL_PATH: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507
       SAVE_ROOT: ${{ github.workspace }}/.hcu-core/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.scenario }}/checkpoints
       LOG_DIR: ${{ github.workspace }}/.hcu-core/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.scenario }}/logs
@@ -89,245 +75,66 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Prepare verl runtime dependencies
+      - name: Load bundled HCU image from shared storage
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --no-cache-dir \
-            sglang-router==0.3.2 \
-            wandb==0.29.0 \
-            nvidia-modelopt==0.46.0
-          python3 -m pip install --no-cache-dir --force-reinstall numpy==1.26.4
+          test -r "${HCU_IMAGE_TAR}"
+          current_id="$(docker image inspect "${HCU_IMAGE}" --format '{{.Id}}' 2>/dev/null || true)"
+          if [[ "${current_id}" != "${HCU_IMAGE_ID}" ]]; then
+            docker load --input "${HCU_IMAGE_TAR}"
+          fi
+          loaded_id="$(docker image inspect "${HCU_IMAGE}" --format '{{.Id}}')"
+          [[ "${loaded_id}" == "${HCU_IMAGE_ID}" ]]
+          echo "Using bundled HCU image: ${HCU_IMAGE} (${loaded_id})"
 
-      - name: Validate HCU runner and local assets
+      - name: Run HCU scenario in bundled image
         shell: bash
         run: |
           set -euo pipefail
-          for value in HCU_MEGATRON_ROOT DATA_ROOT; do
-            [[ -n "${!value}" ]] || { echo "Missing repository variable: ${value}" >&2; exit 1; }
-          done
-
-          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-Bridge"
-          test -d "${HCU_MEGATRON_ROOT}/3rdparty/Megatron-LM"
-          test -f "${MODEL_PATH}/config.json"
-          test -f "${MODEL_PATH}/model.safetensors.index.json"
-          test -f "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl"
-          python3 -c "import sglang; print(sglang.__version__)"
           mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
-          echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" >> "${GITHUB_ENV}"
-          echo "Using local Qwen3-4B model: ${MODEL_PATH}"
-
-      - name: Verify eight-device HCU runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          source hcu_example/common_env.sh
-          python3 -c "import ray, torch; import hcu_megatron; count = torch.cuda.device_count(); print(ray.__version__); print(count, torch.cuda.get_device_name(0)); assert count >= 8"
-
-      - name: Start isolated Ray head
-        shell: bash
-        run: bash hcu_example/start_ray.sh "${NODE_IP}"
-
-      - name: Run fully-async rollout and training
-        if: matrix.scenario == 'fully-async'
-        shell: bash
-        env:
-          NUM_ROLLOUT: "2"
-          ROLLOUT_BATCH_SIZE: "2"
-          N_SAMPLES_PER_PROMPT: "2"
-          GLOBAL_BATCH_SIZE: "4"
-          ROLLOUT_MAX_RESPONSE_LEN: "256"
-        run: |
-          set -euo pipefail
-          bash hcu_example/run_qwen3_4b_fully_async.sh \
-            --node-ip "${NODE_IP}" \
-            --model-path "${MODEL_PATH}" \
-            --data-root "${DATA_ROOT}" \
-            --save-root "${SAVE_ROOT}"
-
-      - name: Run PPO disaggregated actor and critic training
-        if: matrix.scenario == 'ppo-disaggregate'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash hcu_example/run_qwen3_4b_upstream_core.sh \
-            --scenario ppo-disaggregate \
-            --node-ip "${NODE_IP}" \
-            --model-path "${MODEL_PATH}" \
-            --data-root "${DATA_ROOT}" \
-            --save-root "${SAVE_ROOT}" \
-            --log-dir "${LOG_DIR}"
-
-      - name: Run PPO colocated actor, critic, and rollout
-        if: matrix.scenario == 'ppo-colocate'
-        shell: bash
-        env:
-          COLOCATE_ACTOR_NUM_GPUS_PER_NODE: "8"
-          COLOCATE_ROLLOUT_NUM_GPUS: "8"
-          COLOCATE_ROLLOUT_NUM_GPUS_PER_ENGINE: "8"
-          COLOCATE_SGLANG_MEM_FRACTION_STATIC: "0.5"
-          NUM_ROLLOUT: "2"
-          ROLLOUT_BATCH_SIZE: "2"
-          N_SAMPLES_PER_PROMPT: "1"
-          GLOBAL_BATCH_SIZE: "2"
-          ROLLOUT_MAX_RESPONSE_LEN: "128"
-        run: |
-          set -euo pipefail
-          bash hcu_example/run_qwen3_4b_upstream_core.sh \
-            --scenario ppo-colocate \
-            --node-ip "${NODE_IP}" \
-            --model-path "${MODEL_PATH}" \
-            --data-root "${DATA_ROOT}" \
-            --save-root "${SAVE_ROOT}" \
-            --log-dir "${LOG_DIR}"
-
-      - name: Save checkpoint after one HCU training step
-        if: matrix.scenario == 'checkpoint'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash hcu_example/run_qwen3_4b_upstream_core.sh \
-            --scenario checkpoint \
-            --checkpoint-mode save \
-            --node-ip "${NODE_IP}" \
-            --model-path "${MODEL_PATH}" \
-            --data-root "${DATA_ROOT}" \
-            --save-root "${SAVE_ROOT}" \
-            --log-dir "${LOG_DIR}"
-          test -f "${SAVE_ROOT}/latest_checkpointed_iteration.txt"
-          saved_iteration="$(tr -d '[:space:]' < "${SAVE_ROOT}/latest_checkpointed_iteration.txt")"
-          [[ "${saved_iteration}" =~ ^[0-9]+$ ]]
-          echo "CHECKPOINT_SAVED_ITERATION=${saved_iteration}" >> "${GITHUB_ENV}"
-          echo "saved_iteration=${saved_iteration}" | tee "${LOG_DIR}/checkpoint-save-iteration.txt"
-
-      - name: Restart Ray before checkpoint restore
-        if: matrix.scenario == 'checkpoint'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash hcu_example/stop_ray.sh
-          bash hcu_example/start_ray.sh "${NODE_IP}"
-
-      - name: Reload checkpoint and continue HCU training
-        if: matrix.scenario == 'checkpoint'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash hcu_example/run_qwen3_4b_upstream_core.sh \
-            --scenario checkpoint \
-            --checkpoint-mode load \
-            --node-ip "${NODE_IP}" \
-            --model-path "${MODEL_PATH}" \
-            --data-root "${DATA_ROOT}" \
-            --save-root "${SAVE_ROOT}" \
-            --log-dir "${LOG_DIR}"
-          resumed_iteration="$(tr -d '[:space:]' < "${SAVE_ROOT}/latest_checkpointed_iteration.txt")"
-          [[ "${resumed_iteration}" =~ ^[0-9]+$ ]]
-          (( resumed_iteration > CHECKPOINT_SAVED_ITERATION ))
-          echo "resumed_iteration=${resumed_iteration}" | tee "${LOG_DIR}/checkpoint-resume-iteration.txt"
-
-      - name: Run extended checkpoint save and restore modes
-        if: matrix.scenario == 'checkpoint-extended'
-        shell: bash
-        env:
-          ROLLOUT_MAX_RESPONSE_LEN: "64"
-        run: |
-          set -euo pipefail
-
-          run_roundtrip() {
-            local variant="$1"
-            local async_save="$2"
-            local save_optimizer="$3"
-            local load_optimizer="$4"
-            local checkpoint_dir="${SAVE_ROOT}/${variant}"
-            local variant_log_dir="${LOG_DIR}/${variant}"
-            local -a async_args=()
-
-            if [[ "${async_save}" == "1" ]]; then
-              async_args+=(--checkpoint-async-save)
-            fi
-
-            mkdir -p "${checkpoint_dir}" "${variant_log_dir}"
-            bash hcu_example/stop_ray.sh
-            bash hcu_example/start_ray.sh "${NODE_IP}"
-            bash hcu_example/run_qwen3_4b_upstream_core.sh \
-              --scenario checkpoint \
-              --checkpoint-mode save \
-              --checkpoint-optimizer "${save_optimizer}" \
-              "${async_args[@]}" \
-              --node-ip "${NODE_IP}" \
-              --model-path "${MODEL_PATH}" \
-              --data-root "${DATA_ROOT}" \
-              --save-root "${checkpoint_dir}" \
-              --log-dir "${variant_log_dir}"
-
-            if [[ "${async_save}" == "1" ]]; then
-              local async_log
-              async_log="$(find "${variant_log_dir}" -maxdepth 1 -type f \
-                -name '*-checkpoint-save-*-async-*.log' -print | sort | tail -n 1)"
-              [[ -n "${async_log}" ]]
-              grep -q 'scheduled an async checkpoint save' "${async_log}"
-              grep -q 'successfully saved checkpoint' "${async_log}"
-              ! grep -q 'Disabling --async-save' "${async_log}"
-            fi
-
-            local saved_iteration
-            saved_iteration="$(tr -d '[:space:]' < "${checkpoint_dir}/latest_checkpointed_iteration.txt")"
-            [[ "${saved_iteration}" =~ ^[0-9]+$ ]]
-
-            bash hcu_example/stop_ray.sh
-            bash hcu_example/start_ray.sh "${NODE_IP}"
-            bash hcu_example/run_qwen3_4b_upstream_core.sh \
-              --scenario checkpoint \
-              --checkpoint-mode load \
-              --checkpoint-optimizer "${load_optimizer}" \
-              --node-ip "${NODE_IP}" \
-              --model-path "${MODEL_PATH}" \
-              --data-root "${DATA_ROOT}" \
-              --save-root "${checkpoint_dir}" \
-              --log-dir "${variant_log_dir}"
-
-            local resumed_iteration
-            resumed_iteration="$(tr -d '[:space:]' < "${checkpoint_dir}/latest_checkpointed_iteration.txt")"
-            [[ "${resumed_iteration}" =~ ^[0-9]+$ ]]
-            (( resumed_iteration > saved_iteration ))
-            printf 'variant=%s saved=%s resumed=%s\n' \
-              "${variant}" "${saved_iteration}" "${resumed_iteration}" \
-              | tee "${variant_log_dir}/checkpoint-roundtrip.txt"
-
-            # Checkpoints are roughly 100 GB per roundtrip.  Logs contain the
-            # verification evidence, so release generated state before the
-            # next variant runs.
-            rm -rf -- "${checkpoint_dir}"
+          cleanup_container() {
+            docker rm --force "${HCU_CONTAINER_NAME}" >/dev/null 2>&1 || true
           }
+          trap cleanup_container EXIT
 
-          run_roundtrip async-cpu-cpu 1 cpu cpu
-          run_roundtrip sync-cpu-gpu 0 cpu gpu
-          run_roundtrip sync-gpu-cpu 0 gpu cpu
-          run_roundtrip sync-gpu-gpu 0 gpu gpu
-
-      - name: Run streaming partial-rollout abort and recycle
-        if: matrix.scenario == 'streaming-partial'
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash hcu_example/run_qwen3_4b_upstream_core.sh \
-            --scenario streaming-partial \
-            --node-ip "${NODE_IP}" \
-            --model-path "${MODEL_PATH}" \
-            --data-root "${DATA_ROOT}" \
-            --save-root "${SAVE_ROOT}" \
-            --log-dir "${LOG_DIR}"
-
-      - name: Stop Ray
-        if: always()
-        shell: bash
-        run: bash hcu_example/stop_ray.sh
-
-      - name: Clean extended checkpoint state
-        if: always() && matrix.scenario == 'checkpoint-extended'
-        shell: bash
-        run: rm -rf -- "${SAVE_ROOT}"
+          docker run --rm --pull=never \
+            --name "${HCU_CONTAINER_NAME}" \
+            --ipc=host \
+            --shm-size=128g \
+            --device=/dev/kfd \
+            --device=/dev/mkfd \
+            --device=/dev/dri \
+            --group-add=video \
+            --cap-add=SYS_PTRACE \
+            --security-opt=seccomp=unconfined \
+            --ulimit=memlock=-1:-1 \
+            --privileged \
+            --volume /opt/hyhal:/opt/hyhal:ro \
+            --volume /public:/public:ro \
+            --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+            --workdir "${GITHUB_WORKSPACE}" \
+            --env SLIME_ROOT \
+            --env HCU_MEGATRON_ROOT \
+            --env DATA_ROOT \
+            --env MODEL_PATH \
+            --env SAVE_ROOT \
+            --env LOG_DIR \
+            --env NODE_IP \
+            --env NUM_GPUS \
+            --env HIP_VISIBLE_DEVICES \
+            --env ACTOR_NUM_GPUS_PER_NODE \
+            --env ROLLOUT_NUM_GPUS \
+            --env ROLLOUT_NUM_GPUS_PER_ENGINE \
+            --env SUBMIT_MODE \
+            --env WANDB_MODE \
+            --env TOKENIZERS_PARALLELISM \
+            --env PYTHONDONTWRITEBYTECODE=1 \
+            --env XDG_CACHE_HOME=/tmp/slime-hcu-cache \
+            --env HOST_UID="$(id -u)" \
+            --env HOST_GID="$(id -g)" \
+            "${HCU_IMAGE}" \
+            bash hcu_example/run_hcu_ci.sh "${{ matrix.scenario }}"
 
       - name: Upload HCU core logs
         if: always()
@@ -337,3 +144,19 @@ jobs:
           path: ${{ github.workspace }}/.hcu-core/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.scenario }}/logs/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Clean HCU core state
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          scenario_root="${GITHUB_WORKSPACE}/.hcu-core/${{ github.run_id }}-${{ github.run_attempt }}/${{ matrix.scenario }}"
+          if [[ -d "${scenario_root}" ]] && docker image inspect "${HCU_IMAGE}" >/dev/null 2>&1; then
+            docker run --rm --pull=never \
+              --volume "${scenario_root}:/ci-output" \
+              --env HOST_UID="$(id -u)" \
+              --env HOST_GID="$(id -g)" \
+              "${HCU_IMAGE}" \
+              bash -c 'rm -rf -- /ci-output/checkpoints /ci-output/cache; chown -R "${HOST_UID}:${HOST_GID}" /ci-output'
+          fi
+          rm -rf -- "${scenario_root}"

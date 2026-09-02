@@ -12,23 +12,25 @@ The jobs target the `ci-general` runner group with these labels:
 self-hosted, ci, bw1000
 ```
 
-The runner must provide Docker, `/opt/hyhal`, `/public`, and eight available
-HCU devices. Both HCU workflows run inside the pinned verl image
-`harbor.sourcefind.cn:5443/dcu/admin/base/custom:verl-das-ubuntu22.04-dtk26.04-py3.10-20260617-2235`.
+The runner must provide Docker, `/opt/hyhal`, `/public`, eight available HCU
+devices, and enough Docker storage for the bundled image. Both HCU workflows
+use the exact image below:
 
-## Repository variables
+```text
+tag: slime-das:hcu-v0.3.0-20260902
+id:  sha256:522679376cfe815290508512ec3b02ab6d01fa21426bafc18b35c62a293eea3c
+tar: /public/home/niuhb/slime-das-hcu-v0.3.0-20260902.tar.gz
+```
 
-Configure these non-secret repository variables before enabling the HCU PR
-workflow. Model and dataset directories must be local, read-only paths on the
-runner; the workflow never downloads them.
+The tar archive is available on the shared `/public` storage of every eligible
+runner. A job loads it only when that exact image ID is absent, then starts the
+container with `--pull=never`. A Harbor account and repository variables are
+not required.
 
-| Variable | Purpose |
-| --- | --- |
-| `SLIME_DAS_HCU_MEGATRON_ROOT` | HCU Megatron checkout root; the workflows derive `3rdparty/Megatron-Bridge` and `3rdparty/Megatron-LM` from it |
-| `SLIME_DAS_HCU_DATA_ROOT` | Parent directory of `dapo-math-17k/` and `aime-2024/` |
-
-SGLang is loaded from the verl image. The model path defaults to the read-only
-runner mount `/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507`.
+HCU Megatron and the test datasets are bundled at `/opt/hcu-megatron` and
+`/opt/slime-data`. SGLang is loaded from the same image. The model path remains
+the read-only shared mount
+`/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507`.
 
 Do not store tokens, passwords, or writable production paths in repository
 variables. Use repository secrets only when an external credential is
