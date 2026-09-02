@@ -43,7 +43,7 @@ usage() {
 Usage: run_qwen3_4b.sh [options]
 
 Options:
-  --node-ip IP       Ray head IP (default: 12.12.12.48)
+  --node-ip IP       Ray head IP (default: 127.0.0.1)
   --model-path PATH  Hugging Face model directory
   --model-args PATH  Model args script, e.g. scripts/models/qwen3.5-4B.sh
   --data-root PATH   Parent directory of dapo-math-17k and aime-2024

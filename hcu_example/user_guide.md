@@ -92,8 +92,8 @@ export DATA_ROOT=<path-to-data-root>
 export SAVE_ROOT=<path-to-checkpoint-output>
 ```
 
-Qwen3-4B 示例的默认模型路径是
-`/public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507`；只有使用其他模型目录时才需要设置 `MODEL_PATH`。
+运行 Qwen3-4B 示例前，请将 `MODEL_PATH` 设置为执行环境中实际可读的模型目录。
+文档不预设任何宿主机模型路径。
 
 ```text
 <data-root>/dapo-math-17k/dapo-math-17k.jsonl
