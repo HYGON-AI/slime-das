@@ -59,6 +59,8 @@ The workflow runs serially in an isolated environment and must not share model
 outputs or Ray processes with production workloads. Its token has only
 `contents: read`; it receives no secrets, write permission, or long-lived
 credentials, and checkout does not persist the GitHub token.
+Closing or merging a pull request does not cancel a job that has already
+started; cancel that workflow run explicitly when its result is no longer needed.
 
 Security warning: `pull_request_target` checks out and executes contributor
 code on a self-hosted runner. A malicious fork can attempt to access the
