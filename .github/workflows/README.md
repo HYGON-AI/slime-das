@@ -66,3 +66,8 @@ runner, its HCU devices, Docker, mounted runtime files, repository variables,
 and network. The runner must therefore be dedicated, isolated, disposable,
 and free of credentials or unrelated writable mounts. Repository variables
 used by this workflow must be treated as public information.
+
+Both checkout steps explicitly opt in to `allow-unsafe-pr-checkout` because
+`actions/checkout@v6` otherwise blocks fork code in `pull_request_target`
+workflows. This option acknowledges the risk; it does not make contributor
+code safe or replace runner isolation.
