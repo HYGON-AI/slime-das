@@ -51,7 +51,8 @@ The workflow starts an isolated local Ray head, runs the existing
 uploads logs and stops Ray. It passes only when all of the following succeed:
 
 1. Required model, data, and runtime roots exist.
-2. Ray, PyTorch, and HCU Megatron import successfully and one HCU device is visible.
+2. Ray, PyTorch, and HCU Megatron import successfully and one HCU device is
+   visible.
 3. The Ray head becomes available.
 4. The Qwen3-4B rollout/training command exits with status zero.
 
