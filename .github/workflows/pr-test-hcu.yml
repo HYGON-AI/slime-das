@@ -68,6 +68,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           persist-credentials: false
+          allow-unsafe-pr-checkout: true
 
       - name: Validate configuration and load HCU image
         shell: bash
