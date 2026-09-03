@@ -34,17 +34,17 @@ secrets only when an external credential is strictly required.
 
 ## Test scope and pass criteria
 
-`upstream-core-hcu.yml` runs automatically after matching changes are merged
-or otherwise pushed to `main`. It can also be started manually with
-`workflow_dispatch`. It does not execute untrusted fork code before merge.
+`upstream-core-hcu.yml` uses `pull_request_target` to run the six HCU upstream
+core scenarios for matching fork pull requests during review. It can also be
+started manually with `workflow_dispatch`. It explicitly checks out and tests
+the pull request merge commit and does not run again merely because the pull
+request is merged into `main`.
 
-`pr-test-hcu.yml` uses `pull_request_target` so matching fork pull requests can
-run during review. Repository variables come from the target repository. The
-workflow explicitly checks out the pull request merge commit, rather than the
-target repository's default branch, and tests that merged result. Draft pull
-requests are skipped until they become ready for review.
-Changes to this `pull_request_target` definition take effect only after they
-are present on the target repository's default branch.
+`pr-test-hcu.yml` uses the same event and checkout rules for the minimum
+single-node smoke test. Both workflows read repository variables from the
+target repository and skip draft pull requests until they become ready for
+review. Changes to either `pull_request_target` definition take effect only
+after they are present on the target repository's default branch.
 
 The workflow starts an isolated local Ray head, runs the existing
 `hcu_example/run_qwen3_4b.sh` with one rollout and minimum batch sizes, then
