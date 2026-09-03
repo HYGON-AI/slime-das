@@ -43,6 +43,8 @@ run during review. Repository variables come from the target repository. The
 workflow explicitly checks out the pull request merge commit, rather than the
 target repository's default branch, and tests that merged result. Draft pull
 requests are skipped until they become ready for review.
+Changes to this `pull_request_target` definition take effect only after they
+are present on the target repository's default branch.
 
 The workflow starts an isolated local Ray head, runs the existing
 `hcu_example/run_qwen3_4b.sh` with one rollout and minimum batch sizes, then
