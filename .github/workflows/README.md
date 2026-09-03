@@ -6,16 +6,27 @@ separate from the static and build smoke workflows.
 
 ## Runtime requirements
 
-The execution environment must provide Docker, eight available HCU devices,
-the required HCU runtime devices and libraries, and enough Docker storage for
-the test image. Image selection and storage details are infrastructure-specific
-settings and are not duplicated in this document.
+The HCU jobs use the `ci-general` runner group and require the `self-hosted`
+and `ci` labels. The execution environment must provide Docker, eight
+available HCU devices, the required HCU runtime devices and libraries, and
+enough Docker storage for the test image.
 
 HCU Megatron and the test datasets are bundled at `/opt/hcu-megatron` and
 `/opt/slime-data`. These are paths inside the container image rather than
 runner host paths. SGLang is loaded from the same image. The model directory
-must be supplied as a read-only mount through CI configuration; its
-environment-specific host path must not be committed to the repository.
+is mounted read-only at `/model` and must contain `config.json`.
+
+The workflows read non-secret infrastructure settings from repository
+variables in the target repository:
+
+- `HCU_BASE_IMAGE`: image name used by the HCU test container.
+- `HCU_BASE_IMAGE_ARCHIVE`: readable image archive used when the image is not
+  already available on the runner.
+- `CI_MODEL_PATH`: readable model directory mounted into the container as
+  `/model:ro`.
+
+Environment-specific host paths belong only in these repository variables;
+the workflow, README, and scripts must not provide cluster-path fallbacks.
 
 Do not commit cluster host paths, tokens, passwords, or writable production
 paths. Use repository variables for non-secret CI settings and repository
@@ -27,10 +38,11 @@ secrets only when an external credential is strictly required.
 or otherwise pushed to `main`. It can also be started manually with
 `workflow_dispatch`. It does not execute untrusted fork code before merge.
 
-`pr-test-hcu.yml` runs only for same-repository pull requests that modify HCU
-runtime code, training code, dependencies, HCU examples, or the workflow
-itself. Fork pull requests are skipped to prevent untrusted code from running
-in the HCU execution environment.
+`pr-test-hcu.yml` uses `pull_request_target` so matching fork pull requests can
+run during review. Repository variables come from the target repository. The
+workflow explicitly checks out the pull request merge commit, rather than the
+target repository's default branch, and tests that merged result. Draft pull
+requests are skipped until they become ready for review.
 
 The workflow starts an isolated local Ray head, runs the existing
 `hcu_example/run_qwen3_4b.sh` with one rollout and minimum batch sizes, then
@@ -41,6 +53,14 @@ uploads logs and stops Ray. It passes only when all of the following succeed:
 3. The Ray head becomes available.
 4. The Qwen3-4B rollout/training command exits with status zero.
 
-The workflow runs serially in an isolated environment. It is not enabled for
-fork pull requests and must not share model outputs or Ray processes with
-production workloads.
+The workflow runs serially in an isolated environment and must not share model
+outputs or Ray processes with production workloads. Its token has only
+`contents: read`; it receives no secrets, write permission, or long-lived
+credentials, and checkout does not persist the GitHub token.
+
+Security warning: `pull_request_target` checks out and executes contributor
+code on a self-hosted runner. A malicious fork can attempt to access the
+runner, its HCU devices, Docker, mounted runtime files, repository variables,
+and network. The runner must therefore be dedicated, isolated, disposable,
+and free of credentials or unrelated writable mounts. Repository variables
+used by this workflow must be treated as public information.

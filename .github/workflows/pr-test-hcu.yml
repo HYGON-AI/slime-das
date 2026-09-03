@@ -4,7 +4,8 @@
 name: PR Test (HCU)
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - main
     paths:
@@ -18,11 +19,12 @@ on:
       - "requirements.txt"
       - "setup.py"
       - ".github/workflows/pr-test-hcu.yml"
+      - ".github/workflows/README.md"
   workflow_dispatch:
 
 concurrency:
-  group: slime-das-hcu-bw1000
-  cancel-in-progress: false
+  group: pr-test-hcu-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -30,23 +32,21 @@ permissions:
 jobs:
   hcu-qwen3-4b-smoke:
     name: HCU Qwen3-4B single-node smoke
-    # Do not execute pull requests from forks on a self-hosted HCU runner.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request_target' || github.event.pull_request.draft == false
     runs-on:
       group: ci-general
-      labels: [self-hosted, ci, bw1000]
+      labels: [self-hosted, ci]
     timeout-minutes: 60
     env:
-      HCU_BASE_IMAGE: ${{ vars.HCU_BASE_IMAGE }}
-      HCU_BASE_IMAGE_ARCHIVE: ${{ vars.HCU_BASE_IMAGE_ARCHIVE }}
+      CI_IMAGE: ${{ vars.HCU_BASE_IMAGE }}
+      CI_IMAGE_ARCHIVE: ${{ vars.HCU_BASE_IMAGE_ARCHIVE }}
+      CI_MODEL_PATH: ${{ vars.CI_MODEL_PATH }}
       HCU_IMAGE_ID: sha256:522679376cfe815290508512ec3b02ab6d01fa21426bafc18b35c62a293eea3c
       HCU_CONTAINER_NAME: slime-das-hcu-${{ github.run_id }}-${{ github.run_attempt }}-smoke
       SLIME_ROOT: ${{ github.workspace }}
       HCU_MEGATRON_ROOT: /opt/hcu-megatron
       DATA_ROOT: /opt/slime-data
-      MODEL_PATH: /public/opendas/DL_DATA/llm-models/qwen3/Qwen3-4B-Thinking-2507
+      MODEL_PATH: /model
       SAVE_ROOT: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/checkpoints
       LOG_DIR: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/logs
       NODE_IP: "127.0.0.1"
@@ -63,29 +63,36 @@ jobs:
       TOKENIZERS_PARALLELISM: "false"
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - name: Check out pull request merge commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          persist-credentials: false
 
-      - name: Load bundled HCU image from shared storage
+      - name: Validate configuration and load HCU image
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "${HCU_BASE_IMAGE}" ]] || {
-            echo "Missing repository variable: HCU_BASE_IMAGE" >&2
-            exit 1
-          }
-          current_id="$(docker image inspect "${HCU_BASE_IMAGE}" --format '{{.Id}}' 2>/dev/null || true)"
-          if [[ "${current_id}" != "${HCU_IMAGE_ID}" ]]; then
-            [[ -n "${HCU_BASE_IMAGE_ARCHIVE}" ]] || {
-              echo "Missing repository variable: HCU_BASE_IMAGE_ARCHIVE" >&2
-              exit 1
+          for name in CI_IMAGE CI_IMAGE_ARCHIVE CI_MODEL_PATH; do
+            test -n "${!name:-}" || {
+              echo "::error::Repository variable ${name} is not configured."
+              exit 2
             }
-            test -r "${HCU_BASE_IMAGE_ARCHIVE}"
-            docker load --input "${HCU_BASE_IMAGE_ARCHIVE}"
+          done
+          test -f "${CI_MODEL_PATH}/config.json" || {
+            echo "::error::Model config is not readable: ${CI_MODEL_PATH}/config.json"
+            exit 2
+          }
+          if ! docker image inspect "${CI_IMAGE}" >/dev/null 2>&1; then
+            test -r "${CI_IMAGE_ARCHIVE}" || {
+              echo "::error::Image archive is not readable: ${CI_IMAGE_ARCHIVE}"
+              exit 2
+            }
+            docker load --input "${CI_IMAGE_ARCHIVE}"
           fi
-          loaded_id="$(docker image inspect "${HCU_BASE_IMAGE}" --format '{{.Id}}')"
+          loaded_id="$(docker image inspect "${CI_IMAGE}" --format '{{.Id}}')"
           [[ "${loaded_id}" == "${HCU_IMAGE_ID}" ]]
-          echo "Using bundled HCU image: ${HCU_BASE_IMAGE} (${loaded_id})"
+          echo "Using bundled HCU image: ${CI_IMAGE} (${loaded_id})"
 
       - name: Run Qwen3-4B minimum rollout and training step
         shell: bash
@@ -110,7 +117,7 @@ jobs:
             --ulimit=memlock=-1:-1 \
             --privileged \
             --volume /opt/hyhal:/opt/hyhal:ro \
-            --volume /public:/public:ro \
+            --volume "${CI_MODEL_PATH}:/model:ro" \
             --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
             --workdir "${GITHUB_WORKSPACE}" \
             --env SLIME_ROOT \
@@ -135,7 +142,7 @@ jobs:
             --env XDG_CACHE_HOME=/tmp/slime-hcu-cache \
             --env HOST_UID="$(id -u)" \
             --env HOST_GID="$(id -g)" \
-            "${HCU_BASE_IMAGE}" \
+            "${CI_IMAGE}" \
             bash hcu_example/run_hcu_ci.sh smoke
 
       - name: Upload HCU smoke logs
@@ -153,12 +160,12 @@ jobs:
         run: |
           set -euo pipefail
           smoke_root="${GITHUB_WORKSPACE}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}"
-          if [[ -d "${smoke_root}" ]] && docker image inspect "${HCU_BASE_IMAGE}" >/dev/null 2>&1; then
+          if [[ -d "${smoke_root}" ]] && docker image inspect "${CI_IMAGE}" >/dev/null 2>&1; then
             docker run --rm --pull=never \
               --volume "${smoke_root}:/ci-output" \
               --env HOST_UID="$(id -u)" \
               --env HOST_GID="$(id -g)" \
-              "${HCU_BASE_IMAGE}" \
+              "${CI_IMAGE}" \
               bash -c 'rm -rf -- /ci-output/checkpoints /ci-output/cache; chown -R "${HOST_UID}:${HOST_GID}" /ci-output'
           fi
           rm -rf -- "${smoke_root}"
