@@ -3,22 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-# HCU Qwen3.5-4B example using only packages installed inside the Docker image.
-#
-# This script intentionally does NOT:
-#   - source common_env.sh
-#   - source slime/scripts/models/qwen3.5-4B.sh
-#   - run train.py by file path
-#   - add local source checkouts to PYTHONPATH
-#
-# It is meant for validating the wheel/site-packages installation.
+# HCU Qwen3.5-4B training example.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common_env.sh"
-unset PYTHONPATH
-
-PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
-TRAIN_ENTRY="${TRAIN_ENTRY:-/tmp/run_installed_slime_train.py}"
 
 NODE_IP="${NODE_IP:-127.0.0.1}"
 RAY_PORT="${RAY_PORT:-63888}"
@@ -74,7 +62,6 @@ Usage: run_qwen3.5_4b.sh [options]
 Options:
   --node-ip IP       Ray head IP, default 127.0.0.1
   --model-path PATH  Hugging Face Qwen3.5-4B directory
-  --torch-dist PATH  Converted torch_dist checkpoint directory
   --data-root PATH   Parent directory of dapo-math-17k and aime-2024
   --save-root PATH   Checkpoint output directory
   --resume           Resume from SAVE_ROOT/latest_checkpointed_iteration.txt
@@ -82,8 +69,7 @@ Options:
   -h, --help         Show this help
 
 Example:
-  cd /tmp
-  unset PYTHONPATH
+  cd <path-to-slime-das>
   MODEL_PATH=/model/qwen3.5/Qwen3.5-4B \
   TORCH_DIST_PATH=/home/Download/qwen3.5/Qwen3.5-4B_torch_dist \
   RAY_HEAD_ADDRESS=127.0.0.1:63888 \
@@ -95,7 +81,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --node-ip) NODE_IP="$2"; shift 2 ;;
     --model-path) MODEL_PATH="$2"; shift 2 ;;
-    --torch-dist) TORCH_DIST_PATH="$2"; shift 2 ;;
+    --torch-dist-path) TORCH_DIST_PATH="$2"; shift 2 ;;
     --data-root) DATA_ROOT="$2"; shift 2 ;;
     --save-root) SAVE_ROOT="$2"; shift 2 ;;
     --resume) RESUME=1; shift ;;
@@ -106,127 +92,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${SUBMIT_MODE}" != "direct" ]]; then
-  echo "This installed-package validation script only supports SUBMIT_MODE=direct." >&2
+  echo "This script only supports SUBMIT_MODE=direct." >&2
   exit 2
 fi
 
 for required in \
   "${MODEL_PATH}/config.json" \
-  "${TORCH_DIST_PATH}" \
   "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl" \
   "${DATA_ROOT}/aime-2024/aime-2024.jsonl"; do
   [[ -e "${required}" ]] || { echo "Missing required file: ${required}" >&2; exit 1; }
 done
 
-cat > "${TRAIN_ENTRY}" <<'PY'
-import os
-
-import ray
-
-import megatron.core
-import ray as ray_pkg
-import sglang
-import slime
-import slime_plugins
-from slime.ray.placement_group import create_placement_groups, create_rollout_manager, create_training_models
-from slime.utils.arguments import parse_args
-from slime.utils.logging_utils import configure_logger, finish_tracking, init_tracking, update_tracking_open_metrics
-from slime.utils.misc import should_run_periodic_action
-
-
-def train(args):
-    print("[IMPORT_CHECK] cwd:", os.getcwd(), flush=True)
-    print("[IMPORT_CHECK] PYTHONPATH:", os.environ.get("PYTHONPATH"), flush=True)
-    print("[IMPORT_CHECK] slime:", slime.__file__, flush=True)
-    print("[IMPORT_CHECK] slime_plugins:", slime_plugins.__file__, flush=True)
-    print("[IMPORT_CHECK] megatron.core:", megatron.core.__file__, flush=True)
-    print("[IMPORT_CHECK] sglang:", sglang.__file__, flush=True)
-    print("[IMPORT_CHECK] ray:", ray_pkg.__file__, flush=True)
-
-    configure_logger()
-    pgs = create_placement_groups(args)
-    init_tracking(args)
-
-    rollout_manager, num_rollout_per_epoch = create_rollout_manager(args, pgs["rollout"])
-
-    router_addr = ray.get(rollout_manager.get_metrics_router_addr.remote())
-    update_tracking_open_metrics(args, router_addr)
-
-    actor_model, critic_model = create_training_models(args, pgs, rollout_manager)
-
-    if args.offload_rollout:
-        ray.get(rollout_manager.onload_weights.remote())
-
-    actor_model.update_weights()
-
-    if args.check_weight_update_equal:
-        ray.get(rollout_manager.check_weights.remote(action="compare"))
-
-    if args.offload_rollout:
-        ray.get(rollout_manager.onload_kv.remote())
-
-    if args.num_rollout == 0 and args.eval_interval is not None:
-        ray.get(rollout_manager.eval.remote(rollout_id=0))
-
-    def offload_train(actor_trains_this_step):
-        if not args.offload_train:
-            if not args.use_critic or actor_trains_this_step:
-                actor_model.clear_memory()
-            else:
-                critic_model.clear_memory()
-
-    def save(rollout_id):
-        actor_trains_this_step = (not args.use_critic) or rollout_id >= args.num_critic_only_steps
-        if actor_trains_this_step:
-            actor_model.save_model(rollout_id, force_sync=rollout_id == args.num_rollout - 1)
-        if args.use_critic:
-            critic_model.save_model(rollout_id, force_sync=rollout_id == args.num_rollout - 1)
-        if args.rollout_global_dataset:
-            ray.get(rollout_manager.save.remote(rollout_id))
-
-    for rollout_id in range(args.start_rollout_id, args.num_rollout):
-        if args.eval_interval is not None and rollout_id == 0 and not args.skip_eval_before_train:
-            ray.get(rollout_manager.eval.remote(rollout_id))
-
-        rollout_data_ref = ray.get(rollout_manager.generate.remote(rollout_id))
-
-        if args.offload_rollout:
-            ray.get(rollout_manager.offload.remote())
-
-        actor_trains_this_step = (not args.use_critic) or rollout_id >= args.num_critic_only_steps
-
-        if args.use_critic:
-            value_refs = critic_model.async_train(rollout_id, rollout_data_ref)
-            if actor_trains_this_step:
-                ray.get(actor_model.async_train(rollout_id, rollout_data_ref, external_data=value_refs))
-            else:
-                ray.get(value_refs)
-        else:
-            ray.get(actor_model.async_train(rollout_id, rollout_data_ref))
-
-        if should_run_periodic_action(rollout_id, args.save_interval, num_rollout_per_epoch, args.num_rollout):
-            save(rollout_id)
-
-        offload_train(actor_trains_this_step)
-
-        if args.offload_rollout:
-            ray.get(rollout_manager.onload_weights.remote())
-
-        actor_model.update_weights()
-
-        if args.offload_rollout:
-            ray.get(rollout_manager.onload_kv.remote())
-
-        if should_run_periodic_action(rollout_id, args.eval_interval, num_rollout_per_epoch):
-            ray.get(rollout_manager.eval.remote(rollout_id))
-
-    ray.get(rollout_manager.dispose.remote())
-    finish_tracking(args)
-
-
-if __name__ == "__main__":
-    train(parse_args())
-PY
 
 curl --fail --silent "http://${NODE_IP}:${RAY_DASHBOARD_PORT}/api/version" >/dev/null || {
   echo "Ray dashboard is not available at http://${NODE_IP}:${RAY_DASHBOARD_PORT}." >&2
@@ -370,11 +246,10 @@ fi
 mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
 MODEL_NAME="$(basename "${MODEL_PATH}")"
 TIME_STAMP="$(date '+%Y%m%d-%H%M%S')"
-LOG_FILE="${LOG_DIR}/${MODEL_NAME}-installed-${SUBMIT_MODE}-node${ACTOR_NUM_NODES}-rollout${ROLLOUT_NUM_GPUS}-${TIME_STAMP}.log"
+LOG_FILE="${LOG_DIR}/${MODEL_NAME}-${SUBMIT_MODE}-node${ACTOR_NUM_NODES}-rollout${ROLLOUT_NUM_GPUS}-${TIME_STAMP}.log"
 
-echo "Submitting installed-package Qwen3.5-4B job"
+echo "Submitting Qwen3.5-4B job"
 echo "Model:      ${MODEL_PATH}"
-echo "TorchDist:  ${TORCH_DIST_PATH}"
 echo "Data:       ${DATA_ROOT}"
 echo "Save:       ${SAVE_ROOT}"
 echo "Log:        ${LOG_FILE}"
@@ -382,8 +257,7 @@ echo "Ray:        ${RAY_HEAD_ADDRESS}"
 echo "PYTHONPATH: ${PYTHONPATH:-<unset>}"
 
 TRAIN_CMD=(
-  "${PYTHON_BIN}"
-  "${TRAIN_ENTRY}"
+  python3 "${SLIME_ROOT}/train.py"
   --actor-num-nodes "${ACTOR_NUM_NODES}"
   --actor-num-gpus-per-node "${ACTOR_NUM_GPUS_PER_NODE}"
   --rollout-num-gpus "${ROLLOUT_NUM_GPUS}"
