@@ -148,6 +148,22 @@ export ROC_AQL_QUEUE_SIZE="${ROC_AQL_QUEUE_SIZE:-131072}"
 export NCCL_MAX_NCHANNELS="${NCCL_MAX_NCHANNELS:-16}"
 export NCCL_MIN_NCHANNELS="${NCCL_MIN_NCHANNELS:-16}"
 export ALLREDUCE_STREAM_WITH_COMPUTE="${ALLREDUCE_STREAM_WITH_COMPUTE:-1}"
+
+export SLIME_GLM5_INDEXER_BLOCK_N=64
+export SLIME_GLM5_INDEXER_NUM_STAGES=1
+export SLIME_GLM5_INDEXER_THREADS=256
+
+export SLIME_GLM5_SPARSE_MLA_BLOCK_I=16
+export SLIME_GLM5_SPARSE_MLA_NUM_STAGES=1
+export SLIME_GLM5_SPARSE_MLA_THREADS=64
+export SLIME_GLM5_SPARSE_MLA_HEADS_PER_BLOCK=16
+
+export SLIME_GLM5_SPARSE_MLA_BWD_BLOCK_SIZE=16
+export SLIME_GLM5_SPARSE_MLA_BWD_NUM_STAGES=0
+export SLIME_GLM5_SPARSE_MLA_BWD_THREADS=64
+export SLIME_GLM5_SPARSE_MLA_BWD_HEADS_PER_BLOCK=16
+export SLIME_GLM5_SPARSE_MLA_BWD_SPLIT_STORE=4
+
 export SGLANG_USE_LIGHTOP="${SGLANG_USE_LIGHTOP:-1}"
 export SGLANG_USE_FP8_W8A8_MOE="${SGLANG_USE_FP8_W8A8_MOE:-1}"
 
@@ -157,7 +173,7 @@ fi
 
 CKPT_ARGS=(
   --hf-checkpoint "${MODEL_PATH}"
-  --megatron-to-hf-mode bridge
+  #--megatron-to-hf-mode bridge
   --load "${MODEL_PATH}"
   --ref-load "${MODEL_PATH}"
   --save "${SAVE_ROOT}"
@@ -206,7 +222,7 @@ MODEL_ARGS=(
   --multi-latent-attention
   --q-lora-rank 2048
   --kv-lora-rank 512
-  --qk-head-dim 256
+  --qk-head-dim 192
   --v-head-dim 256
   --kv-channels 192
   --qk-pos-emb-head-dim 64

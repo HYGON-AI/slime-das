@@ -3,7 +3,7 @@
 import tilelang
 import torch
 from tilelang import language as T
-
+import os
 
 @tilelang.jit(
     pass_configs={
@@ -124,7 +124,18 @@ def indexer_fwd_interface(q, kv, weights, cu_seqlen_ks, cu_seqlen_ke, clean_logi
 
     clean_logits_kernel = clean_logits_()
 
-    tl_indexer_fwd_kernel = tl_indexer_fwd_impl(heads=heads, index_dim=index_dim)
+    # Large CUDA-oriented defaults can exceed the per-block LDS limit on HCU.
+    # Keep the upstream defaults while allowing backend-specific launch tuning.
+    block_n = int(os.getenv("SLIME_GLM5_INDEXER_BLOCK_N", "256"))
+    num_stages = int(os.getenv("SLIME_GLM5_INDEXER_NUM_STAGES", "3"))
+    threads = int(os.getenv("SLIME_GLM5_INDEXER_THREADS", "512"))
+    tl_indexer_fwd_kernel = tl_indexer_fwd_impl(
+        heads=heads,
+        index_dim=index_dim,
+        block_N=block_n,
+        num_stages=num_stages,
+        threads=threads,
+    )
 
     logits = torch.empty([seq_len, seq_len_kv], device=q.device, dtype=torch.float32)
     tl_indexer_fwd_kernel(

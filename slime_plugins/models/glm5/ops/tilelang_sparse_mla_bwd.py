@@ -3,7 +3,7 @@
 import tilelang
 import torch
 from tilelang import language as T
-
+import os
 
 @tilelang.jit(out_idx=[-1])
 def preprocess(
@@ -95,6 +95,8 @@ def bwd(
     block_size=32,
     num_stages=0,
     threads=128,
+    max_heads_per_block=64,
+    split_store=2,
     indices_dtype=T.int32,
     dtype=T.bfloat16,
     accum_dtype=T.float32,
@@ -122,13 +124,14 @@ def bwd(
 
     H = H_kv
     padded_H = max(tilelang.math.next_power_of_2(H_kv), 16)
-    block_H = min(64, padded_H)
+    block_H = min(max_heads_per_block, padded_H)
     assert padded_H % block_H == 0
     NH = padded_H // block_H
     BS = block_size
     NS = tilelang.cdiv(topk, block_size)
 
-    split_store = 2
+    #split_store = 2
+    assert BS % split_store == 0, "block_size must be divisible by split_store"
 
     @T.prim_func
     def sparse_mla_bwd_kernel(
@@ -294,7 +297,28 @@ def sparse_mla_bwd(q, kv, o, do, indices, lse, sm_scale=None, is_casual=True, re
 
     # Get kernels
     preprocess_kernel = preprocess(B, S, H, D)
-    bwd_kernel = bwd(B, S, S_kv, H, D, D_tail, topk, kv_group, sm_scale, is_casual)
+    block_size = int(os.getenv("SLIME_GLM5_SPARSE_MLA_BWD_BLOCK_SIZE", "32"))
+    num_stages = int(os.getenv("SLIME_GLM5_SPARSE_MLA_BWD_NUM_STAGES", "0"))
+    threads = int(os.getenv("SLIME_GLM5_SPARSE_MLA_BWD_THREADS", "128"))
+    max_heads_per_block = int(os.getenv("SLIME_GLM5_SPARSE_MLA_BWD_HEADS_PER_BLOCK", "64"))
+    split_store = int(os.getenv("SLIME_GLM5_SPARSE_MLA_BWD_SPLIT_STORE", "2"))
+    bwd_kernel = bwd(
+        B,
+        S,
+        S_kv,
+        H,
+        D,
+        D_tail,
+        topk,
+        kv_group,
+        sm_scale,
+        is_casual,
+        block_size=block_size,
+        num_stages=num_stages,
+        threads=threads,
+        max_heads_per_block=max_heads_per_block,
+        split_store=split_store,
+    )
     postprocess_kernel = postprocess(B, S_kv, D, D_tail, kv_group)
 
     if delta is None:

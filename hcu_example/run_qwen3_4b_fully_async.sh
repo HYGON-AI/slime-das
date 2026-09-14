@@ -121,10 +121,11 @@ source "${MODEL_ARGS_SCRIPT}"
 
 CKPT_ARGS=(
   --hf-checkpoint "${MODEL_PATH}"
-  --megatron-to-hf-mode bridge
+  #--megatron-to-hf-mode bridge
+  --load "${MODEL_PATH}"
   --ref-load "${MODEL_PATH}"
   --save "${SAVE_ROOT}"
-  --save-interval "${SAVE_INTERVAL}"
+  --save-interval 20
 )
 
 if [[ "${RESUME}" == 1 ]]; then

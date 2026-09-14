@@ -152,14 +152,11 @@ MODEL_ARGS=(
 
 CKPT_ARGS=(
   --hf-checkpoint "${MODEL_PATH}"
-  # --ref-load "${TORCH_DIST_PATH}"
-  # --load "${TORCH_DIST_PATH}"
+  #--megatron-to-hf-mode bridge
   --load "${MODEL_PATH}"
-  --megatron-to-hf-mode bridge
   --ref-load "${MODEL_PATH}"
   --save "${SAVE_ROOT}"
-  --save-interval "${SAVE_INTERVAL}"
-  #--megatron-to-hf-mode raw
+  --save-interval 20
 )
 
 if [[ "${RESUME}" == "1" ]]; then

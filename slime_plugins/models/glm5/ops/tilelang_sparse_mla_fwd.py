@@ -2,7 +2,7 @@
 # Adapted from https://github.com/tile-ai/tilelang/blob/e666d2d3cc483829c57618c9ebf2e4f4ada0819d/examples/deepseek_v32/sparse_mla_fwd.py
 import tilelang
 from tilelang import language as T
-
+import os
 
 @tilelang.jit(
     out_idx=[-2, -1],
@@ -23,6 +23,7 @@ def sparse_mla_fwd(
     block_I=64,
     num_stages=2,
     threads=256,
+    max_heads_per_block=64,
 ):
     assert dim == tilelang.math.next_power_of_2(dim), f"haven't check padding correctness yet, dim={dim}"
     assert tail_dim == tilelang.math.next_power_of_2(
@@ -61,13 +62,16 @@ def sparse_mla_fwd(
     D = dim
     D_tail = tail_dim
 
-    if head_kv > 64:
-        assert head_kv % 64 == 0, "head_kv should be a multiple of 64"
-        REPLICATE_H = head_kv // 64
-    else:
-        REPLICATE_H = 1
+    # if head_kv > 64:
+    #     assert head_kv % 64 == 0, "head_kv should be a multiple of 64"
+    #     REPLICATE_H = head_kv // 64
+    # else:
+    #     REPLICATE_H = 1
 
-    H_per_block = padded_H if REPLICATE_H == 1 else 64
+    # H_per_block = padded_H if REPLICATE_H == 1 else 64
+    H_per_block = min(padded_H, max_heads_per_block)
+    assert padded_H % H_per_block == 0, "padded heads must be divisible by max_heads_per_block"
+    REPLICATE_H = padded_H // H_per_block
 
     @T.prim_func
     def main(
@@ -108,7 +112,8 @@ def sparse_mla_fwd(
             q_i = s_i
             max_kv_i = q_i
 
-            H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * 64)
+            # H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * 64)
+            H0 = g_i * padded_H + (0 if REPLICATE_H == 1 else (bx % REPLICATE_H) * H_per_block)
             H1 = H0 + H_per_block
 
             T.copy(Q[b_i, s_i, H0:H1, :D], Q_shared)
@@ -191,6 +196,13 @@ def sparse_mla_fwd_interface(
     _, _, _, topk = indices.shape
     assert indices.shape == (batch, seq_len, kv_group, topk)
 
+    # Split both the head and sparse-index tiles on devices with a small
+    # per-block LDS limit. Defaults preserve the upstream launch geometry.
+    block_I = int(os.getenv("SLIME_GLM5_SPARSE_MLA_BLOCK_I", str(block_I)))
+    num_stages = int(os.getenv("SLIME_GLM5_SPARSE_MLA_NUM_STAGES", str(num_stages)))
+    threads = int(os.getenv("SLIME_GLM5_SPARSE_MLA_THREADS", str(threads)))
+    max_heads_per_block = int(os.getenv("SLIME_GLM5_SPARSE_MLA_HEADS_PER_BLOCK", "64"))
+
     kernel = sparse_mla_fwd(
         heads,
         dim,
@@ -202,6 +214,7 @@ def sparse_mla_fwd_interface(
         block_I=block_I,
         num_stages=num_stages,
         threads=threads,
+        max_heads_per_block=max_heads_per_block,
     )
     out, lse = kernel(q, kv, indices)
     out = out.squeeze(0)
