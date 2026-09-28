@@ -34,6 +34,7 @@ PIPELINE_MODEL_PARALLEL_SIZE="${PIPELINE_MODEL_PARALLEL_SIZE:-1}"
 CONTEXT_PARALLEL_SIZE="${CONTEXT_PARALLEL_SIZE:-1}"
 EXPERT_MODEL_PARALLEL_SIZE="${EXPERT_MODEL_PARALLEL_SIZE:-4}"
 EXPERT_TENSOR_PARALLEL_SIZE="${EXPERT_TENSOR_PARALLEL_SIZE:-1}"
+export DSA_KERNEL_BACKEND="${DSA_KERNEL_BACKEND:-tilelang}"
 
 NUM_ROLLOUT="${NUM_ROLLOUT:-4}"
 ROLLOUT_BATCH_SIZE="${ROLLOUT_BATCH_SIZE:-1}"
@@ -85,6 +86,7 @@ Common env knobs:
   ACTOR_NUM_GPUS_PER_NODE=4
   TENSOR_MODEL_PARALLEL_SIZE=4
   EXPERT_MODEL_PARALLEL_SIZE=1
+  DSA_KERNEL_BACKEND=hip|tilelang
   ROLLOUT_NUM_GPUS=4
   ROLLOUT_NUM_GPUS_PER_ENGINE=4
   SGLANG_MEM_FRACTION_STATIC=0.75
@@ -106,6 +108,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "${DSA_KERNEL_BACKEND}" in
+  hip|tilelang) ;;
+  *) echo "Unsupported DSA_KERNEL_BACKEND=${DSA_KERNEL_BACKEND}; use hip or tilelang." >&2; exit 2 ;;
+esac
+
 for required in \
   "${MODEL_PATH}/config.json" \
   "${DATA_ROOT}/dapo-math-17k/dapo-math-17k.jsonl" \
@@ -113,6 +120,10 @@ for required in \
   "${SCRIPT_DIR}/env.yaml"; do
   [[ -e "${required}" ]] || { echo "Missing required file: ${required}" >&2; exit 1; }
 done
+
+if [[ "${DSA_KERNEL_BACKEND}" == "hip" ]]; then
+  python3 -c 'from hip_dsa import DSA, sparse_attn_forward; assert hasattr(DSA, "indexer_forward_wrapper"); assert hasattr(DSA, "indexer_top_k_wrapper"); assert hasattr(DSA, "sparse_attention_backward_wrapper")'
+fi
 
 curl --fail --silent "http://127.0.0.1:${RAY_DASHBOARD_PORT}/api/version" >/dev/null || {
   echo "Ray dashboard is not available. Run ${SCRIPT_DIR}/start_ray.sh ${NODE_IP} first." >&2
@@ -149,21 +160,6 @@ export NCCL_MAX_NCHANNELS="${NCCL_MAX_NCHANNELS:-16}"
 export NCCL_MIN_NCHANNELS="${NCCL_MIN_NCHANNELS:-16}"
 export ALLREDUCE_STREAM_WITH_COMPUTE="${ALLREDUCE_STREAM_WITH_COMPUTE:-1}"
 
-export SLIME_GLM5_INDEXER_BLOCK_N=64
-export SLIME_GLM5_INDEXER_NUM_STAGES=1
-export SLIME_GLM5_INDEXER_THREADS=256
-
-export SLIME_GLM5_SPARSE_MLA_BLOCK_I=16
-export SLIME_GLM5_SPARSE_MLA_NUM_STAGES=1
-export SLIME_GLM5_SPARSE_MLA_THREADS=64
-export SLIME_GLM5_SPARSE_MLA_HEADS_PER_BLOCK=16
-
-export SLIME_GLM5_SPARSE_MLA_BWD_BLOCK_SIZE=16
-export SLIME_GLM5_SPARSE_MLA_BWD_NUM_STAGES=0
-export SLIME_GLM5_SPARSE_MLA_BWD_THREADS=64
-export SLIME_GLM5_SPARSE_MLA_BWD_HEADS_PER_BLOCK=16
-export SLIME_GLM5_SPARSE_MLA_BWD_SPLIT_STORE=4
-
 export SGLANG_USE_LIGHTOP="${SGLANG_USE_LIGHTOP:-1}"
 export SGLANG_USE_FP8_W8A8_MOE="${SGLANG_USE_FP8_W8A8_MOE:-1}"
 
@@ -192,6 +188,7 @@ fi
 # the following 1 MoE layer, matching config moe_layer_freq=[0,0,0,1].
 MODEL_ARGS=(
   --spec "slime_plugins.models.glm5.glm5" "get_glm5_spec"
+  --dsa-kernel-backend "${DSA_KERNEL_BACKEND}"
   --moe-layer-freq "[0]*3+[1]*1"
   --num-experts 256
   --moe-shared-expert-intermediate-size 2048
@@ -353,6 +350,7 @@ echo "Actor nodes: ${ACTOR_NUM_NODES}"
 echo "Actor GPUs per node: ${ACTOR_NUM_GPUS_PER_NODE}"
 echo "Rollout GPUs: ${ROLLOUT_NUM_GPUS}"
 echo "Rollout GPUs per engine: ${ROLLOUT_NUM_GPUS_PER_ENGINE}"
+echo "Training DSA backend: ${DSA_KERNEL_BACKEND}"
 echo "Submit mode: ${SUBMIT_MODE}"
 
 TRAIN_CMD=(

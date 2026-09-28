@@ -27,6 +27,7 @@ from megatron.core.transformer.transformer_block import get_num_layers_to_build
 from megatron.core.transformer.transformer_config import MLATransformerConfig
 from transformers import AutoConfig
 
+from .ops.hip_dsa import hip_dsa_select_topk, hip_dsa_sparse_attention, use_hip_dsa
 from .ops.indexer import generate_varlen_mask_params, lighting_indexer
 from .ops.sparse_mla import SGLangSparseMLA, SparseMLA
 
@@ -452,6 +453,18 @@ class DSAMultiLatentAttention(Attention):
         )
 
         def fused_select_topk(index_q, index_k, w, starts, ends, block_size=8192):
+            if use_hip_dsa(self.config):
+                return None, hip_dsa_select_topk(
+                    self.config,
+                    index_q,
+                    index_k,
+                    w,
+                    starts,
+                    ends,
+                    self.index_topk,
+                    block_size=block_size,
+                )
+
             seq_len = index_q.shape[0]
             indexer_topk_scores = []
             topk_indices = []
@@ -523,7 +536,16 @@ class DSAMultiLatentAttention(Attention):
             ends = scatter_to_sequence_parallel_region(ends, group=parallel_state.get_context_parallel_group())
             _, topk_indices = fused_select_topk(index_query, index_key, head_weights, starts, ends)
 
-        if os.getenv("MEGATRON_USE_SGLANG_SPARSE_MLA", "0") == "1":
+        if use_hip_dsa(self.config):
+            core_attn_out = hip_dsa_sparse_attention(
+                self.config,
+                q,
+                kv,
+                topk_indices,
+                self.softmax_scale,
+                self.config.kv_lora_rank,
+            )
+        elif os.getenv("MEGATRON_USE_SGLANG_SPARSE_MLA", "0") == "1":
             core_attn_out, _ = SGLangSparseMLA.apply(
                 q,
                 kv,
@@ -1003,6 +1025,17 @@ class DSAMLASelfAttention(DSAMultiLatentAttention):
 
 def get_glm5_spec(args, config, vp_stage):
     hf_config = AutoConfig.from_pretrained(args.hf_checkpoint, trust_remote_code=True)
+    # Some HCU Megatron revisions parse --dsa-kernel-backend but do not copy
+    # that newer CLI field into MLATransformerConfig.  Keep the model-side
+    # switch authoritative by propagating the parsed value explicitly.
+    requested_dsa_backend = getattr(args, "dsa_kernel_backend", None)
+    if requested_dsa_backend is not None:
+        config.dsa_kernel_backend = requested_dsa_backend
+    print(
+        "[GLM5] DSA backend: "
+        f"args={requested_dsa_backend!r}, config={getattr(config, 'dsa_kernel_backend', None)!r}",
+        flush=True,
+    )
     config.index_num_attention_heads = hf_config.index_n_heads
     config.index_head_dim = hf_config.index_head_dim
     # Optional cross-layer index-sharing schedule. Present on DSA checkpoints that
