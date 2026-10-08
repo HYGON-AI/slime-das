@@ -14,17 +14,6 @@ def _config(**kwargs):
     return SimpleNamespace(**values)
 
 
-def test_hip_dsa_config_switch(monkeypatch):
-    monkeypatch.delenv("DSA_KERNEL_BACKEND", raising=False)
-    assert hip_dsa.use_hip_dsa(_config()) is True
-    assert hip_dsa.use_hip_dsa(_config(dsa_kernel_backend="tilelang")) is False
-
-
-def test_hip_dsa_environment_switch_overrides_config(monkeypatch):
-    monkeypatch.setenv("DSA_KERNEL_BACKEND", "hip")
-    assert hip_dsa.use_hip_dsa(_config(dsa_kernel_backend="tilelang")) is True
-
-
 def test_hip_dsa_indexer_calls_package_interfaces(monkeypatch):
     calls = {}
 

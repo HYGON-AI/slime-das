@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import functools
 import logging
-import os
 
 import torch
 
@@ -35,18 +34,13 @@ def _load_hip_dsa():
 
 
 def use_hip_dsa(config) -> bool:
-    """Return whether the launch selected direct hip-dsa.
-
-    ``DSA_KERNEL_BACKEND`` is authoritative when exported by the launcher;
-    the serialized config is the fallback for other launch paths.
-    """
-
-    backend = os.getenv(
-        "DSA_KERNEL_BACKEND", getattr(config, "dsa_kernel_backend", "none")
-    ).lower()
+    import os
+    """Return whether the Megatron configuration selected the HIP DSA backend."""
+    backend = (getattr(config, "dsa_kernel_backend", None) or "none").lower()
     if backend not in ("none", "tilelang", "hip"):
-        raise ValueError(f"Unsupported DSA_KERNEL_BACKEND={backend!r}")
+        raise ValueError(f"Unsupported dsa_kernel_backend={backend!r}")
     return backend == "hip"
+    #return getattr(config, "dsa_kernel_backend", "none") == "hip"
 
 
 def _require_supported_context_parallel(config) -> None:

@@ -139,6 +139,14 @@ def _get_model_provider_func(
             provider.num_layers_in_first_pipeline_stage = args.decoder_first_pipeline_num_layers
         if getattr(args, "decoder_last_pipeline_num_layers", None) is not None:
             provider.num_layers_in_last_pipeline_stage = args.decoder_last_pipeline_num_layers
+
+        requested_dsa_backend = getattr(args, "dsa_kernel_backend", None)
+        if requested_dsa_backend is not None:
+            if not hasattr(provider, "dsa_kernel_backend"):
+                raise RuntimeError(
+                    f"{type(provider).__name__} does not expose dsa_kernel_backend"
+                )
+            provider.dsa_kernel_backend = requested_dsa_backend
         provider.finalize()
 
         if role == "critic":

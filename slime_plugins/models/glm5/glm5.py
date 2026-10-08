@@ -1031,11 +1031,6 @@ def get_glm5_spec(args, config, vp_stage):
     requested_dsa_backend = getattr(args, "dsa_kernel_backend", None)
     if requested_dsa_backend is not None:
         config.dsa_kernel_backend = requested_dsa_backend
-    print(
-        "[GLM5] DSA backend: "
-        f"args={requested_dsa_backend!r}, config={getattr(config, 'dsa_kernel_backend', None)!r}",
-        flush=True,
-    )
     config.index_num_attention_heads = hf_config.index_n_heads
     config.index_head_dim = hf_config.index_head_dim
     # Optional cross-layer index-sharing schedule. Present on DSA checkpoints that
