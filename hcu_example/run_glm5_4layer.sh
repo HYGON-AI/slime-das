@@ -36,6 +36,15 @@ EXPERT_MODEL_PARALLEL_SIZE="${EXPERT_MODEL_PARALLEL_SIZE:-4}"
 EXPERT_TENSOR_PARALLEL_SIZE="${EXPERT_TENSOR_PARALLEL_SIZE:-1}"
 DSA_KERNEL_BACKEND="${DSA_KERNEL_BACKEND:-hip}"
 
+# Kept configurable so the GLM-5.2 4-layer smoke wrapper can reuse this
+# launch plumbing while retaining its own HF architecture values.
+MODEL_LABEL="${MODEL_LABEL:-GLM-5}"
+MODEL_TAG="${MODEL_TAG:-glm5}"
+MODEL_NUM_LAYERS="${MODEL_NUM_LAYERS:-4}"
+MODEL_MOE_LAYER_FREQ="${MODEL_MOE_LAYER_FREQ:-[0]*3+[1]*1}"
+MODEL_ROUTED_EXPERTS="${MODEL_ROUTED_EXPERTS:-256}"
+MODEL_ROTARY_BASE="${MODEL_ROTARY_BASE:-1000000}"
+
 NUM_ROLLOUT="${NUM_ROLLOUT:-4}"
 ROLLOUT_BATCH_SIZE="${ROLLOUT_BATCH_SIZE:-1}"
 N_SAMPLES_PER_PROMPT="${N_SAMPLES_PER_PROMPT:-1}"
@@ -199,13 +208,14 @@ if [[ "${RESUME}" == 1 ]]; then
   CKPT_ARGS+=(--load "${SAVE_ROOT}")
 fi
 
-# GLM-5 4-layer model args. The sliced model keeps the first 3 dense layers and
-# the following 1 MoE layer, matching config moe_layer_freq=[0,0,0,1].
+# 4-layer GLM model args. The default sliced model keeps the first 3 dense
+# layers and the following 1 MoE layer, matching moe_layer_freq=[0,0,0,1].
+# MODEL_* overrides are used by run_glm52_4layer.sh.
 MODEL_ARGS=(
   --spec "slime_plugins.models.glm5.glm5" "get_glm5_spec"
   --dsa-kernel-backend "${DSA_KERNEL_BACKEND}"
-  --moe-layer-freq "[0]*3+[1]*1"
-  --num-experts 256
+  --moe-layer-freq "${MODEL_MOE_LAYER_FREQ}"
+  --num-experts "${MODEL_ROUTED_EXPERTS}"
   --moe-shared-expert-intermediate-size 2048
   --moe-router-topk 8
   --moe-grouped-gemm
@@ -220,7 +230,7 @@ MODEL_ARGS=(
   --moe-aux-loss-coeff 0
   --moe-router-dtype fp32
   --make-vocab-size-divisible-by 16
-  --num-layers 4
+  --num-layers "${MODEL_NUM_LAYERS}"
   --hidden-size 6144
   --ffn-hidden-size 12288
   --num-attention-heads 64
@@ -239,7 +249,7 @@ MODEL_ARGS=(
   --kv-channels 192
   --qk-pos-emb-head-dim 64
   --vocab-size 154880
-  --rotary-base 1000000
+  --rotary-base "${MODEL_ROTARY_BASE}"
   --enable-experimental
   #--allgather-cp
 )
@@ -353,9 +363,9 @@ fi
 mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
 MODEL_NAME="$(basename "${MODEL_PATH}")"
 TIME_STAMP="$(date '+%Y%m%d-%H%M%S')"
-LOG_FILE="${LOG_DIR}/${MODEL_NAME}-glm5-${SUBMIT_MODE}-node${ACTOR_NUM_NODES}-rollout${ROLLOUT_NUM_GPUS}-${TIME_STAMP}.log"
+LOG_FILE="${LOG_DIR}/${MODEL_NAME}-${MODEL_TAG}-${SUBMIT_MODE}-node${ACTOR_NUM_NODES}-rollout${ROLLOUT_NUM_GPUS}-${TIME_STAMP}.log"
 
-echo "Submitting GLM-5 4-layer job to http://${NODE_IP}:${RAY_DASHBOARD_PORT}"
+echo "Submitting ${MODEL_LABEL} ${MODEL_NUM_LAYERS}-layer job to http://${NODE_IP}:${RAY_DASHBOARD_PORT}"
 echo "Model: ${MODEL_PATH}"
 echo "Data:  ${DATA_ROOT}"
 echo "Save:  ${SAVE_ROOT}"
