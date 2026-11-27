@@ -4,8 +4,10 @@
 name: PR Test (HCU)
 
 on:
+  # Label-triggered: a maintainer adding `run-ci` starts HCU PR CI. Opening,
+  # pushing, reopening or marking the PR ready for review no longer does.
   pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [labeled]
     branches:
       - main
     paths:
@@ -23,7 +25,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: pr-test-hcu-${{ github.event.pull_request.number || github.ref }}
+  # Unrelated label events get a throwaway group: they skip every job and must
+  # not cancel or queue behind the HCU run they share a PR with.
+  group: pr-test-hcu-${{ github.event.pull_request.number || github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name != 'run-ci' && github.run_id || 'checks' }}
   cancel-in-progress: true
 
 permissions:
@@ -32,21 +36,24 @@ permissions:
 jobs:
   hcu-qwen3-4b-smoke:
     name: HCU Qwen3-4B single-node smoke
-    if: github.event_name != 'pull_request_target' || github.event.pull_request.draft == false
-    runs-on:
-      group: ci-general
-      labels: [self-hosted, ci]
+    # HCU CI runs only when `run-ci` is added (the workflow accepts no other
+    # PR event); draft pull requests are still skipped.
+    if: github.event_name != 'pull_request_target' || (github.event.label.name == 'run-ci' && github.event.pull_request.draft == false)
+    # ARC K8s pool: the job template injects the eight HCU devices, /dev/shm,
+    # /opt/hyhal, /public and /ci_public, and the job runs inside the HCU image
+    # (no docker-in-job).
+    runs-on: hygon-bw1100-8card
     timeout-minutes: 60
+    container:
+      image: ${{ vars.HCU_BASE_IMAGE }}
     env:
-      CI_IMAGE: ${{ vars.HCU_BASE_IMAGE }}
-      CI_IMAGE_ARCHIVE: ${{ vars.HCU_BASE_IMAGE_ARCHIVE }}
       CI_MODEL_PATH: ${{ vars.CI_MODEL_PATH }}
-      HCU_IMAGE_ID: sha256:522679376cfe815290508512ec3b02ab6d01fa21426bafc18b35c62a293eea3c
-      HCU_CONTAINER_NAME: slime-das-hcu-${{ github.run_id }}-${{ github.run_attempt }}-smoke
       SLIME_ROOT: ${{ github.workspace }}
       HCU_MEGATRON_ROOT: /opt/hcu-megatron
       DATA_ROOT: /opt/slime-data
-      MODEL_PATH: /model
+      # The model directory is read directly from the pod mount, not bind-mounted
+      # from a host path the way the old docker launcher did.
+      MODEL_PATH: ${{ vars.CI_MODEL_PATH }}
       SAVE_ROOT: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/checkpoints
       LOG_DIR: ${{ github.workspace }}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}/logs
       NODE_IP: "127.0.0.1"
@@ -61,6 +68,8 @@ jobs:
       EVAL_MAX_RESPONSE_LEN: "256"
       WANDB_MODE: disabled
       TOKENIZERS_PARALLELISM: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+      XDG_CACHE_HOME: /tmp/slime-hcu-cache
 
     steps:
       - name: Check out pull request merge commit
@@ -70,11 +79,11 @@ jobs:
           persist-credentials: false
           allow-unsafe-pr-checkout: true
 
-      - name: Validate configuration and load HCU image
+      - name: Validate configuration
         shell: bash
         run: |
           set -euo pipefail
-          for name in CI_IMAGE CI_IMAGE_ARCHIVE CI_MODEL_PATH; do
+          for name in CI_MODEL_PATH; do
             test -n "${!name:-}" || {
               echo "::error::Repository variable ${name} is not configured."
               exit 2
@@ -84,67 +93,11 @@ jobs:
             echo "::error::Model config is not readable: ${CI_MODEL_PATH}/config.json"
             exit 2
           }
-          if ! docker image inspect "${CI_IMAGE}" >/dev/null 2>&1; then
-            test -r "${CI_IMAGE_ARCHIVE}" || {
-              echo "::error::Image archive is not readable: ${CI_IMAGE_ARCHIVE}"
-              exit 2
-            }
-            docker load --input "${CI_IMAGE_ARCHIVE}"
-          fi
-          loaded_id="$(docker image inspect "${CI_IMAGE}" --format '{{.Id}}')"
-          [[ "${loaded_id}" == "${HCU_IMAGE_ID}" ]]
-          echo "Using bundled HCU image: ${CI_IMAGE} (${loaded_id})"
+          python3 -c 'import torch; count = torch.cuda.device_count(); print(f"devices={count}"); assert count >= 8'
 
       - name: Run Qwen3-4B minimum rollout and training step
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "${SAVE_ROOT}" "${LOG_DIR}"
-          cleanup_container() {
-            docker rm --force "${HCU_CONTAINER_NAME}" >/dev/null 2>&1 || true
-          }
-          trap cleanup_container EXIT
-
-          docker run --rm --pull=never \
-            --name "${HCU_CONTAINER_NAME}" \
-            --ipc=host \
-            --shm-size=128g \
-            --device=/dev/kfd \
-            --device=/dev/mkfd \
-            --device=/dev/dri \
-            --group-add=video \
-            --cap-add=SYS_PTRACE \
-            --security-opt=seccomp=unconfined \
-            --ulimit=memlock=-1:-1 \
-            --privileged \
-            --volume /opt/hyhal:/opt/hyhal:ro \
-            --volume "${CI_MODEL_PATH}:/model:ro" \
-            --volume "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
-            --workdir "${GITHUB_WORKSPACE}" \
-            --env SLIME_ROOT \
-            --env HCU_MEGATRON_ROOT \
-            --env DATA_ROOT \
-            --env MODEL_PATH \
-            --env SAVE_ROOT \
-            --env LOG_DIR \
-            --env NODE_IP \
-            --env NUM_GPUS \
-            --env HIP_VISIBLE_DEVICES \
-            --env NUM_ROLLOUT \
-            --env ROLLOUT_BATCH_SIZE \
-            --env N_SAMPLES_PER_PROMPT \
-            --env N_SAMPLES_PER_EVAL_PROMPT \
-            --env GLOBAL_BATCH_SIZE \
-            --env ROLLOUT_MAX_RESPONSE_LEN \
-            --env EVAL_MAX_RESPONSE_LEN \
-            --env WANDB_MODE \
-            --env TOKENIZERS_PARALLELISM \
-            --env PYTHONDONTWRITEBYTECODE=1 \
-            --env XDG_CACHE_HOME=/tmp/slime-hcu-cache \
-            --env HOST_UID="$(id -u)" \
-            --env HOST_GID="$(id -g)" \
-            "${CI_IMAGE}" \
-            bash hcu_example/run_hcu_ci.sh smoke
+        run: bash hcu_example/run_hcu_ci.sh smoke
 
       - name: Upload HCU smoke logs
         if: always()
@@ -161,12 +114,4 @@ jobs:
         run: |
           set -euo pipefail
           smoke_root="${GITHUB_WORKSPACE}/.hcu-smoke/${{ github.run_id }}-${{ github.run_attempt }}"
-          if [[ -d "${smoke_root}" ]] && docker image inspect "${CI_IMAGE}" >/dev/null 2>&1; then
-            docker run --rm --pull=never \
-              --volume "${smoke_root}:/ci-output" \
-              --env HOST_UID="$(id -u)" \
-              --env HOST_GID="$(id -g)" \
-              "${CI_IMAGE}" \
-              bash -c 'rm -rf -- /ci-output/checkpoints /ci-output/cache; chown -R "${HOST_UID}:${HOST_GID}" /ci-output'
-          fi
-          rm -rf -- "${smoke_root}"
+          rm -rf -- "${smoke_root}/checkpoints" "${smoke_root}/cache"
